@@ -7,8 +7,10 @@
  *             réparation) ;
  *   link    — pose/màj le thread de build curé d'un perso (ex-threads.json) ;
  *   unlink  — le retire.
- * Réservé à l'admin (defaultMemberPermissions=0 masque la commande à tous ;
- * l'exécution re-vérifie l'ADMIN_USER_ID — ceinture et bretelles).
+ * Réservé à l'admin par l'ADMIN_USER_ID, vérifié À L'EXÉCUTION (les autres
+ * reçoivent « Admin only » en éphémère). PAS de defaultMemberPermissions=0 :
+ * ça masque la commande à quiconque n'a pas la permission Administrateur du
+ * serveur — y compris à l'admin du BOT, qui ne l'a pas sur EvaMains (constaté).
  */
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { config } from '../config.js';
@@ -28,7 +30,6 @@ export const adminCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('admin')
     .setDescription('Outerbot administration')
-    .setDefaultMemberPermissions(0n)
     .addSubcommand((s) =>
       s.setName('sync').setDescription('Create forum posts for new characters now'),
     )
