@@ -1,0 +1,16 @@
+# Dépendances / build
+node_modules/
+dist/
+
+# Secrets — jamais committés (DISCORD_TOKEN…)
+.env
+.env.*
+!.env.example
+
+# Base locale (le volume Docker la porte en prod ; reconstructible depuis Discord)
+data/
+*.sqlite
+*.sqlite-*
+
+# Divers
+*.log

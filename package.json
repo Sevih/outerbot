@@ -1,0 +1,33 @@
+{
+  "name": "outerbot",
+  "version": "0.1.0",
+  "description": "Bot Discord d'Outerpedia — reviews communautaires (forum EvaMains) + lookup wiki",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "deploy-commands": "tsx src/deploy-commands.ts",
+    "test": "vitest run",
+    "lint": "eslint src test",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "discord.js": "^14.25.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.13.2",
+    "eslint": "^9.39.4",
+    "prettier": "^3.9.5",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.1.10"
+  }
+}
