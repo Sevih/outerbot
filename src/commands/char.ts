@@ -81,7 +81,9 @@ export const charCommand: Command = {
       const embed = new EmbedBuilder()
         .setTitle(target.name)
         .setColor(EMBED_COLOR)
-        .setThumbnail(`${config.imgBaseUrl}/images/characters/atb/IG_Turn_${target.id}.webp`)
+        // Face icon (FI_) : cadrée portrait, bien plus lisible en vignette
+        // d'embed que le petit sprite ATB (IG_Turn_) — choix Sevih 21/07.
+        .setThumbnail(`${config.imgBaseUrl}/images/characters/faceicon/FI_${target.id}.webp`)
         .addFields(fields);
       await interaction.reply({ embeds: [embed] });
       return;

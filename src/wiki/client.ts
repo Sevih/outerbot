@@ -22,7 +22,7 @@ export interface WikiCharacter {
   element: string;
   class: string;
   rarity: number;
-  /** Id du jeu — sert l'URL du portrait ATB dans les embeds. */
+  /** Id V3 — sert l'URL de la face icon (FI_<id>) dans les embeds. */
   id: string;
 }
 
