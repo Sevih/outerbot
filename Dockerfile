@@ -24,7 +24,10 @@ RUN pnpm install --frozen-lockfile
 # ---- Étape 2 : build TypeScript ----
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json tsconfig.json tsconfig.build.json ./
+# Lockfile + workspace.yaml inclus : pnpm vérifie l'état des deps avant tout
+# script (`pnpm build` → re-install) et sans le `allowBuilds` du workspace ce
+# re-install échoue en ERR_PNPM_IGNORED_BUILDS (constaté au premier build CI).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN pnpm build
 
