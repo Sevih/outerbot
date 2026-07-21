@@ -74,7 +74,12 @@ export async function syncForumPosts(
     const known = store.knownSlugs();
     const missing = characters.filter((c) => !known.has(c.slug));
     const report: SyncReport = { created: [], failed: [], total: characters.length };
-    if (missing.length === 0) return report;
+    if (missing.length === 0) {
+      // Un passage SANS rien à créer est un sync réussi : il se date aussi
+      // (sinon /status et /health affichent « jamais synchronisé » à vie).
+      store.setMeta('lastForumSync', new Date().toISOString());
+      return report;
+    }
 
     const forum = (await client.channels.fetch(config.reviews.forumChannelId)) as ForumChannel;
     if (forum?.type !== ChannelType.GuildForum) {
