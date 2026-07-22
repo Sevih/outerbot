@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+
+# Lockfile : écrit par pnpm, jamais à la main — prettier n'a pas à le reformater
+# (sinon chaque `pnpm install` casse `format:check` en CI).
+pnpm-lock.yaml

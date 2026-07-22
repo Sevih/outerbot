@@ -1,3 +1,7 @@
+# Réglages pnpm. Autorise ces dépendances de confiance à exécuter leur script de
+# build (better-sqlite3 = binaire natif, esbuild, lefthook = binaire des git
+# hooks). Le reste reste bloqué par défaut (protection supply-chain).
 allowBuilds:
   better-sqlite3: true
   esbuild: true
+  lefthook: true

@@ -54,6 +54,6 @@ pnpm test                 # cœur pur + store (base mémoire)
 
 ## Licence
 
-Code sous licence [MIT](./LICENSE). Les données du jeu *Outerplane* servies par
+Code sous licence [MIT](./LICENSE). Les données du jeu _Outerplane_ servies par
 le bot restent la propriété de leur éditeur (Major9) et de leur développeur
 (VA Games). Projet non affilié à l'éditeur.

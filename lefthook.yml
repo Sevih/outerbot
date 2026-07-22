@@ -1,0 +1,22 @@
+# Git hooks gérés par lefthook (installés via le script "prepare" de package.json).
+# But : attraper AVANT le commit ce que la CI refuserait après (format, lint).
+# Même config que le repo du site, pour ne pas avoir deux réflexes différents.
+
+pre-commit:
+  parallel: true
+  commands:
+    # Formate les fichiers indexés, puis ré-indexe les corrections.
+    format:
+      glob: '*.{ts,js,mjs,json,md,yml,yaml}'
+      run: pnpm prettier --write {staged_files}
+      stage_fixed: true
+    # Lint uniquement les fichiers TS indexés.
+    lint:
+      glob: '*.ts'
+      run: pnpm eslint {staged_files}
+
+pre-push:
+  commands:
+    # Vérification de types complète avant de pousser.
+    typecheck:
+      run: pnpm typecheck
