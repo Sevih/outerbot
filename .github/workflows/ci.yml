@@ -73,6 +73,13 @@ jobs:
     needs: docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Sérialise les deploys de CE repo (deux pushes rapprochés = deux
+    # `compose up` simultanés qui se percutent — vécu côté site le 30/07,
+    # cf. son ci.yml). La course INTER-repos (le site déploie la même stack)
+    # est tenue par le flock côté VPS, dans le script ci-dessous.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
     steps:
       - name: Déploiement SSH sur le VPS
         uses: appleboy/ssh-action@v1
@@ -86,6 +93,11 @@ jobs:
             set -e
             export PATH="$HOME/.local/bin:$PATH"
             cd ~/sevih-tool
+            # VERROU inter-repos (même fichier que le ci.yml du site) : un seul
+            # déploiement de la stack à la fois sur le VPS, d'où qu'il vienne.
+            # 10 min d'attente max (= command_timeout), puis échec franc.
+            exec 9>/tmp/deploy-stack.lock
+            flock -w 600 9
             # Régénère stack/.env depuis le coffre chiffré (le compose exige des
             # variables `${VAR:?}` — resynchronisé à chaque déploiement).
             ./scripts/secrets-decrypt.sh
