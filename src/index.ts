@@ -1,7 +1,8 @@
 /**
  * outerbot — point d'entrée. Ordre de boot :
  *   1. config (fail-fast si un secret manque) → db → client Discord ;
- *   2. à la connexion : listeners reviews, boucle de forum-sync, API HTTP ;
+ *   2. à la connexion : listeners reviews, boucle de forum-sync, boucle
+ *      d'annonces (coupons + journal du site), API HTTP ;
  *   3. si la base est VIDE de threads (premier démarrage / migration), un
  *      resync complet depuis Discord reconstruit l'index tout seul.
  * Arrêt propre sur SIGTERM/SIGINT (Docker stop).
@@ -15,6 +16,7 @@ import { consume } from './lib/rate-limiter.js';
 import { commandsByName } from './commands/index.js';
 import { attachReviewListeners } from './reviews/listener.js';
 import { startForumSyncLoop } from './reviews/forum-sync.js';
+import { startAnnounceLoop } from './announce/announcer.js';
 import { resyncFromDiscord } from './reviews/resync.js';
 import { startHttpServer } from './http/server.js';
 
@@ -45,6 +47,7 @@ client.once(Events.ClientReady, (ready) => {
       await resyncFromDiscord(client, store);
     }
     startForumSyncLoop(client, store);
+    startAnnounceLoop(client, store);
   };
   void boot().catch((e) => logger.error('boot échoué', e));
 });

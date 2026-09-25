@@ -8,6 +8,11 @@ Bot Discord d'[Outerpedia](https://outerpedia.com), en production. Deux métiers
   perso).
 - **Lookup wiki** : `/char`, `/item`, `/guide` — liens et fiches express dans
   Discord.
+- **Annonces** : chaque nouveau code promo et chaque nouvelle entrée du journal
+  du site (`/changelog`) est posté dans `ANNOUNCE_CHANNEL_ID`.
+- **Codes promo par le staff** : `/coupon add|edit|remove`, réservé aux rôles
+  `STAFF_ROLE_IDS`. Récompenses et codes existants en autocomplétion, aperçu
+  de l'annonce puis confirmation.
 
 Le code du site est dans un repo séparé,
 [outerpedia](https://github.com/Sevih/outerpedia) ; l'infrastructure du serveur
@@ -26,6 +31,15 @@ qui héberge les deux vit dans un repo d'Infrastructure-as-Code resté privé.
 - **Zéro procédure par perso** : cron interne (6 h) + `/admin sync` créent les
   posts forum manquants tout seuls. Les liens de build curés s'éditent par
   `/admin link` (plus de JSON committé).
+- **Les annonces suivent ce que le site affiche** : le bot interroge
+  `/api/bot/coupons` et `/api/bot/changelog` (sans cache) chaque minute. Un coupon part
+  à sa date de début, une entrée du journal une fois déployée et à sa date. Au
+  premier passage (base neuve ou perdue), l'existant est marqué vu sans être
+  posté.
+- **Le bot n'écrit aucun coupon lui-même** : `/coupon` envoie l'opération à la
+  route interne du site (`/api/internal/coupons`, jeton `COUPON_API_SECRET`),
+  qui valide et écrit la liste vivante sur R2 (écriture conditionnelle : un
+  code ajouté par le staff et une sauvegarde de l'admin ne s'écrasent jamais).
 - **Contrat HTTP identique à l'ancien bot** (`/reviews`, `/reviews/:slug`,
   `/health`) : le site s'y branche sans adaptation.
 

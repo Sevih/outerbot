@@ -49,6 +49,27 @@ export interface WikiItem {
   characterName?: string;
 }
 
+/** Un code promo ACTIF (annonces). Récompenses déjà en texte EN. */
+export interface WikiCoupon {
+  code: string;
+  start: string;
+  end: string;
+  rewards: { name: string; qty: string }[];
+}
+
+/** Une entrée PUBLIÉE du journal du site (annonces). */
+export interface WikiChangelogEntry {
+  date: string;
+  type: 'guide' | 'update' | 'feature' | 'character' | 'news' | 'fix';
+  title: string;
+  /** Puces EN, markdown `**gras**` compris par Discord. */
+  content: string[];
+  /** Chemin du site, sans préfixe de langue. */
+  href: string;
+  /** Chemin d'image relatif (préfixé par IMG_BASE_URL). */
+  thumb?: string;
+}
+
 interface CacheEntry<T> {
   data: T;
   fetchedAt: number;
@@ -105,6 +126,18 @@ export class WikiClient {
 
   getItems(force = false): Promise<WikiItem[]> {
     return this.cached(this.items, '/api/bot/items', (e) => (this.items = e), force);
+  }
+
+  /**
+   * Annonces : SANS cache ni repli stale — la boucle d'annonce a sa propre
+   * cadence, et une donnée périmée n'a rien à annoncer.
+   */
+  fetchCoupons(): Promise<WikiCoupon[]> {
+    return this.fetchJson('/api/bot/coupons');
+  }
+
+  fetchChangelog(): Promise<WikiChangelogEntry[]> {
+    return this.fetchJson('/api/bot/changelog');
   }
 
   /** État pour /status et /health. */

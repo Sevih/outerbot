@@ -38,6 +38,9 @@ export const statusCommand: Command = {
       `Wiki data: **${wikiStatus.charactersCount}** characters (fetched ${wikiStatus.lastFetch ?? 'never'})`,
       `Last forum sync: ${store.getMeta('lastForumSync') ?? 'never'}`,
       `Last full resync: ${store.getMeta('lastResync') ?? 'never'}`,
+      config.announce.channelId
+        ? `Last announcement check: ${store.getMeta('lastAnnounceCheck') ?? 'never'}`
+        : 'Announcements: off (ANNOUNCE_CHANNEL_ID not set)',
     ];
     if (missing.length) {
       lines.push(

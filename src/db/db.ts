@@ -63,6 +63,20 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+
+  // v2 — annonces Discord déjà postées (coupons, journal du site).
+  `
+  -- Ce que le bot a DÉJÀ annoncé (ou marqué vu au premier passage). Seule table
+  -- non reconstructible depuis Discord : si elle est perdue, le premier passage
+  -- suivant remarque tout comme vu SANS poster (pas de rafale d'historique).
+  -- kind = 'coupon' | 'news' ; key = code du coupon, ou date|titre de l'entrée.
+  CREATE TABLE announcements (
+    kind         TEXT NOT NULL,
+    key          TEXT NOT NULL,
+    announced_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (kind, key)
+  );
+  `,
 ];
 
 export type Db = Database.Database;

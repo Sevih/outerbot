@@ -67,6 +67,30 @@ export const config = {
 
   /** Cadence du sync automatique persos → posts forum (ms). */
   syncIntervalMs: Number(optional('SYNC_INTERVAL_HOURS', '6')) * 60 * 60 * 1000,
+
+  coupons: {
+    /** Rôles staff autorisés à /coupon (l'admin du bot l'est toujours). */
+    staffRoleIds: csv('STAFF_ROLE_IDS'),
+    /**
+     * Jeton partagé avec la route interne du site (`/api/internal/coupons`).
+     * Vide = /coupon répond « non configurée » ; le bot démarre quand même.
+     */
+    apiSecret: optional('COUPON_API_SECRET', ''),
+  },
+
+  announce: {
+    /**
+     * Salon des annonces (coupons + journal du site). Vide = fonction coupée :
+     * le bot démarre sans, pour qu'un déploiement ne dépende pas de l'ajout de
+     * la variable dans la stack.
+     */
+    channelId: optional('ANNOUNCE_CHANNEL_ID', ''),
+    /**
+     * Cadence de la vérification (ms). Les routes du site n'ont aucun cache :
+     * c'est le SEUL délai entre la sauvegarde d'un code et son annonce.
+     */
+    intervalMs: Number(optional('ANNOUNCE_INTERVAL_SECONDS', '60')) * 1000,
+  },
 } as const;
 
 export type Config = typeof config;

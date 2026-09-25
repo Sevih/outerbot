@@ -175,6 +175,24 @@ export class Store {
     return this.db.prepare('DELETE FROM build_threads WHERE slug = ?').run(slug).changes > 0;
   }
 
+  // ── Annonces (coupons, journal du site) ───────────────────────────────────
+
+  announcedKeys(kind: string): Set<string> {
+    const rows = this.db.prepare('SELECT key FROM announcements WHERE kind = ?').all(kind) as {
+      key: string;
+    }[];
+    return new Set(rows.map((r) => r.key));
+  }
+
+  markAnnounced(kind: string, keys: string[]): void {
+    const insert = this.db.prepare(
+      'INSERT INTO announcements (kind, key) VALUES (?, ?) ON CONFLICT(kind, key) DO NOTHING',
+    );
+    this.db.transaction(() => {
+      for (const key of keys) insert.run(kind, key);
+    })();
+  }
+
   // ── Méta ──────────────────────────────────────────────────────────────────
 
   setMeta(key: string, value: string): void {
