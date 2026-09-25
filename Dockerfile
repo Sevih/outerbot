@@ -14,7 +14,7 @@ WORKDIR /app
 # DOIT rester aligné sur "packageManager" de package.json (même règle que le
 # site : le pin est répété car pnpm s'installe avant le COPY des manifestes,
 # pour garder le cache Docker de cette couche).
-RUN npm install -g pnpm@11.13.0
+RUN npm install -g pnpm@11.13.1
 
 # ---- Étape 1 : dépendances complètes (build + tests) ----
 FROM base AS deps
