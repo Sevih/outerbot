@@ -11,7 +11,7 @@ Bot Discord d'[Outerpedia](https://outerpedia.com), en production. Deux métiers
 - **Annonces** : chaque nouveau code promo et chaque nouvelle entrée du journal
   du site (`/changelog`) est posté dans `ANNOUNCE_CHANNEL_ID`.
 - **Codes promo par le staff** : `/coupon add|edit|remove`, réservé aux rôles
-  `STAFF_ROLE_IDS`. Récompenses et codes existants en autocomplétion, aperçu
+  `STAFF_ROLE_IDS`. Récompenses, codes existants et dates en autocomplétion, aperçu
   de l'annonce puis confirmation.
 
 Le code du site est dans un repo séparé,

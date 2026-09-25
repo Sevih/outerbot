@@ -112,7 +112,6 @@ async function buildOp(
   interaction: ChatInputCommandInteraction,
 ): Promise<{ op: CouponOp; preview: RawCoupon; verb: string } | { error: string }> {
   const sub = interaction.options.getSubcommand();
-  const today = todayUtc();
 
   if (sub === 'remove') {
     const code = interaction.options.getString('code', true).trim();
@@ -130,7 +129,7 @@ async function buildOp(
     // Même règle que l'écran `pnpm quick` : un code se saisit en majuscules.
     coupon = {
       code: interaction.options.getString('code', true).trim().toUpperCase(),
-      start: interaction.options.getString('start')?.trim() || today,
+      start: interaction.options.getString('start', true).trim(),
       end: interaction.options.getString('end', true).trim(),
       description: rewards.description,
     };
@@ -278,11 +277,13 @@ export const couponCommand: Command = {
           .addStringOption((o) =>
             o.setName('code').setDescription('The code players type').setRequired(true),
           )
+          // `start` OBLIGATOIRE : Discord range toutes les options requises avant
+          // les facultatives — facultatif, il finissait après les 8 champs de
+          // récompenses 2 à 5. « today » est la première suggestion.
+          .addStringOption(dateOption('start', 'First valid day (UTC), YYYY-MM-DD', true))
           .addStringOption(dateOption('end', 'Last valid day (UTC), YYYY-MM-DD', true)),
         1,
         true,
-      ).addStringOption(
-        dateOption('start', 'First valid day (UTC), YYYY-MM-DD — default today', false),
       ),
     )
     .addSubcommand((s) =>

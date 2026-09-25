@@ -135,6 +135,10 @@ describe('définition de /coupon', () => {
     const json = couponCommand.data.toJSON();
     const subs = json.options ?? [];
     expect(subs.map((s) => s.name)).toEqual(['add', 'edit', 'remove']);
+    // L'ordre affiché par Discord : les champs de base d'abord.
+    const add = subs[0];
+    const addNames = (add && 'options' in add ? add.options : undefined)?.map((o) => o.name);
+    expect(addNames?.slice(0, 5)).toEqual(['code', 'start', 'end', 'reward1', 'qty1']);
     for (const sub of subs) {
       const opts = ('options' in sub ? sub.options : undefined) ?? [];
       expect(opts.length).toBeLessThanOrEqual(25);
