@@ -57,15 +57,19 @@ describe('sélection des nouveautés', () => {
 });
 
 describe('embeds', () => {
-  it('coupon : code copiable, quantités lisibles, fin de validité en horodatage Discord', () => {
+  it('coupon : code copiable, quantités lisibles, fin de validité en clair', () => {
     const e = couponEmbed(coupon(), 'https://outerpedia.com');
     expect(e.url).toBe('https://outerpedia.com/coupons');
     expect(e.description).toContain('`GOLDMOONPTY`');
     expect(e.description).toContain('• Gold ×1,000,000');
     const spaced = couponEmbed(coupon({ rewards: [{ name: 'Gold', qty: '1 000 000' }] }), '');
     expect(spaced.description).toContain('• Gold ×1,000,000');
+    // Date EN CLAIR (un horodatage `:D` la décalerait selon le fuseau du
+    // lecteur), plus un relatif, juste partout.
     const end = Date.parse('2026-10-31T23:59:59Z') / 1000;
-    expect(e.description).toContain(`<t:${end}:D>`);
+    expect(e.description).toContain('Valid until **2026-10-31** (UTC)');
+    expect(e.description).toContain(`<t:${end}:R>`);
+    expect(e.description).not.toContain(':D>');
   });
 
   it('coupon : un seul bouton, Redeem, vers la page officielle', () => {

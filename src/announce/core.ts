@@ -49,7 +49,13 @@ export function shiftDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Horodatage Discord (`<t:…>`) de la FIN d'un jour UTC : chaque lecteur le voit dans son fuseau. */
+/**
+ * Instant de la FIN d'un jour UTC, pour l'horodatage RELATIF de Discord
+ * (`<t:…:R>`, « dans un mois »), juste dans tous les fuseaux. PAS pour la date
+ * elle-même : `<t:…:D>` la convertit dans le fuseau du lecteur, et le 31/10 à
+ * 23:59 UTC s'affichait « 1 novembre » à Paris ou à Séoul (constaté). La date
+ * s'écrit donc en clair, comme sur le site.
+ */
 function endOfDayUnix(date: string): number {
   return Math.floor(Date.parse(`${date}T23:59:59Z`) / 1000);
 }
@@ -80,7 +86,7 @@ export function couponEmbed(c: WikiCoupon, siteBaseUrl: string): APIEmbed {
         `\`${c.code}\``,
         '',
         ...(rewards.length ? ['**Rewards**', ...rewards, ''] : []),
-        `Valid until <t:${until}:D> (<t:${until}:R>)`,
+        `Valid until **${c.end}** (UTC) · ends <t:${until}:R>`,
       ].join('\n'),
       4096,
     ),
