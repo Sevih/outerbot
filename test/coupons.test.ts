@@ -139,6 +139,15 @@ describe('définition de /coupon', () => {
     const add = subs[0];
     const addNames = (add && 'options' in add ? add.options : undefined)?.map((o) => o.name);
     expect(addNames?.slice(0, 5)).toEqual(['code', 'start', 'end', 'reward1', 'qty1']);
+    // Requis EXACTEMENT : code, dates et UNE récompense. Les paires 2 à 5 sont
+    // facultatives (toutes requises, Discord en exigeait 5).
+    const required = (sub: (typeof subs)[number] | undefined) =>
+      (sub && 'options' in sub ? sub.options : undefined)
+        ?.filter((o) => o.required)
+        .map((o) => o.name);
+    expect(required(add)).toEqual(['code', 'start', 'end', 'reward1', 'qty1']);
+    expect(required(subs[1])).toEqual(['code']);
+    expect(required(subs[2])).toEqual(['code']);
     for (const sub of subs) {
       const opts = ('options' in sub ? sub.options : undefined) ?? [];
       expect(opts.length).toBeLessThanOrEqual(25);

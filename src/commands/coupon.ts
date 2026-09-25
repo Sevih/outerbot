@@ -57,10 +57,12 @@ const todayUtc = (): string => new Date().toISOString().slice(0, 10);
 /** Options `rewardN` (autocomplétion) + `qtyN`, la 1re paire requise ou non. */
 function addRewardPairs(
   s: SlashCommandSubcommandBuilder,
-  from: number,
-  required: boolean,
+  firstRequired: boolean,
 ): SlashCommandSubcommandBuilder {
-  for (let n = from; n <= MAX_REWARDS; n++) {
+  for (let n = 1; n <= MAX_REWARDS; n++) {
+    // Seule la 1re paire peut être requise : les suivantes sont TOUJOURS
+    // facultatives (toutes requises, Discord exigeait 5 récompenses — vécu).
+    const required = firstRequired && n === 1;
     s.addStringOption((o) =>
       o
         .setName(`reward${n}`)
@@ -282,7 +284,6 @@ export const couponCommand: Command = {
           // récompenses 2 à 5. « today » est la première suggestion.
           .addStringOption(dateOption('start', 'First valid day (UTC), YYYY-MM-DD', true))
           .addStringOption(dateOption('end', 'Last valid day (UTC), YYYY-MM-DD', true)),
-        1,
         true,
       ),
     )
@@ -301,7 +302,6 @@ export const couponCommand: Command = {
           .addStringOption((o) => o.setName('new_code').setDescription('Rename the code'))
           .addStringOption(dateOption('start', 'New first valid day, YYYY-MM-DD', false))
           .addStringOption(dateOption('end', 'New last valid day, YYYY-MM-DD', false)),
-        1,
         false,
       ),
     )
