@@ -105,6 +105,11 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
+          # Un secret collé à la main peut porter un espace ou un retour à la
+          # ligne en trop ; `ssh` refuse alors l'hôte (« hostname contains
+          # invalid characters »). On les retire.
+          host="${VPS_HOST//[[:space:]]/}"
+          user="${VPS_USER//[[:space:]]/}"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
@@ -112,4 +117,4 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o BatchMode=yes -o StrictHostKeyChecking=yes -o HostKeyAlias=vps \
             -o ServerAliveInterval=30 \
-            "$VPS_USER@$VPS_HOST" 'bash ~/sevih-tool/scripts/deploy.sh outerbot'
+            "$user@$host" 'bash ~/sevih-tool/scripts/deploy.sh outerbot'
