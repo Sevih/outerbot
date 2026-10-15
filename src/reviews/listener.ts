@@ -120,7 +120,8 @@ export function attachReviewListeners(client: Client, store: Store): void {
   // Un message édité : la review suit (note, texte) ou sort de l'index si elle
   // n'est plus au format. Un message qui n'est pas une review ne change rien.
   client.on(Events.MessageUpdate, (oldMessage, newMessage) => {
-    if (newMessage.author.bot || newMessage.partial || newMessage.content == null) return;
+    if (newMessage.partial || newMessage.author?.bot !== false || newMessage.content == null)
+      return;
     if (!oldMessage.partial && oldMessage.content === newMessage.content) return; // aperçu de lien…
     const outcome = applyEdit(
       store,
