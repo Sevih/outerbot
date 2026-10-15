@@ -12,7 +12,13 @@
  *     deviné.
  *
  * Écriture ATOMIQUE en fin de scan (`store.replaceAll`) : un resync interrompu
- * ne laisse jamais une base à moitié vide.
+ * ne laisse jamais une base à moitié vide. Le forum-sync attend la fin du
+ * resync (verrou partagé, cf. index-lock.ts) : un post qu'il créerait pendant
+ * le scan serait effacé par cette réécriture.
+ *
+ * Même index que le direct : un membre garde sa PLUS ANCIENNE review au format
+ * (le direct garde la première et efface les suivantes), et le score ne compte
+ * pas la réaction du bot, seulement si elle est là.
  */
 import {
   ChannelType,
@@ -28,6 +34,7 @@ import { logger } from '../lib/logger.js';
 import type { NewReview, Store } from '../db/store.js';
 import { wiki } from '../wiki/client.js';
 import { parseReview, reviewGate, sanitizeReviewText, scoreFromReactions } from './core.js';
+import { withIndexLock } from './index-lock.js';
 
 export interface ResyncReport {
   threads: number;
@@ -94,7 +101,38 @@ function memberRolesResolver(forum: ForumChannel) {
   };
 }
 
-export async function resyncFromDiscord(client: Client, store: Store): Promise<ResyncReport> {
+/**
+ * La plus ancienne review au format de chaque membre dans un fil. Discord rend
+ * les messages du plus récent au plus ancien : on compare les dates. Un scan
+ * interrompu garde ce qu'il a déjà lu (signalé).
+ */
+async function firstReviewByUser(
+  thread: AnyThreadChannel,
+): Promise<Map<string, { message: Message; rating: number; text: string }>> {
+  const first = new Map<string, { message: Message; rating: number; text: string }>();
+  try {
+    for await (const message of allMessages(thread)) {
+      if (message.author.bot) continue;
+      const parsed = parseReview(message.content);
+      if (!parsed) continue;
+      const text = sanitizeReviewText(parsed.text, config.reviews.maxTextLength);
+      if (!text) continue;
+      const seen = first.get(message.author.id);
+      if (!seen || message.createdTimestamp < seen.message.createdTimestamp) {
+        first.set(message.author.id, { message, rating: parsed.rating, text });
+      }
+    }
+  } catch (e) {
+    logger.warn(`resync : scan du thread « ${thread.name} » incomplet`, e);
+  }
+  return first;
+}
+
+export function resyncFromDiscord(client: Client, store: Store): Promise<ResyncReport> {
+  return withIndexLock(() => rebuildIndex(client, store));
+}
+
+async function rebuildIndex(client: Client, store: Store): Promise<ResyncReport> {
   const forum = (await client.channels.fetch(config.reviews.forumChannelId)) as ForumChannel;
   if (forum?.type !== ChannelType.GuildForum) {
     throw new Error(`resync : ${config.reviews.forumChannelId} n'est pas un forum`);
@@ -122,15 +160,8 @@ export async function resyncFromDiscord(client: Client, store: Store): Promise<R
     }
     threads.push({ threadId: thread.id, slug });
 
-    const seenUsers = new Set<string>();
     try {
-      for await (const message of allMessages(thread)) {
-        if (message.author.bot) continue;
-        const parsed = parseReview(message.content);
-        if (!parsed) continue;
-        const text = sanitizeReviewText(parsed.text, config.reviews.maxTextLength);
-        if (!text) continue;
-        if (seenUsers.has(message.author.id)) continue; // un user, une review
+      for (const { message, rating, text } of (await firstReviewByUser(thread)).values()) {
         // Même garde-fou que le dépôt en direct (listener).
         const gate = reviewGate(
           message.author.createdTimestamp,
@@ -142,10 +173,6 @@ export async function resyncFromDiscord(client: Client, store: Store): Promise<R
           refused++;
           continue;
         }
-        seenUsers.add(message.author.id);
-
-        const up = message.reactions.cache.get('👍')?.count ?? 0;
-        const down = message.reactions.cache.get('👎')?.count ?? 0;
         reviews.push({
           messageId: message.id,
           threadId: thread.id,
@@ -154,14 +181,17 @@ export async function resyncFromDiscord(client: Client, store: Store): Promise<R
           username: message.author.username,
           displayName: message.member?.displayName ?? message.author.displayName,
           avatar: message.author.avatar,
-          rating: parsed.rating,
+          rating,
           text,
-          score: scoreFromReactions(up, down),
+          score: scoreFromReactions(
+            message.reactions.cache.get('👍'),
+            message.reactions.cache.get('👎'),
+          ),
           createdAt: message.createdAt.toISOString(),
         });
       }
     } catch (e) {
-      logger.warn(`resync : scan du thread « ${thread.name} » incomplet`, e);
+      logger.warn(`resync : auteurs du thread « ${thread.name} » non vérifiés`, e);
     }
   }
 

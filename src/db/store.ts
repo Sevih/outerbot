@@ -109,11 +109,46 @@ export class Store {
     return this.db.prepare('DELETE FROM reviews WHERE message_id = ?').run(messageId).changes > 0;
   }
 
+  /** Suppression groupée (purge) : renvoie le nombre de reviews retirées. */
+  removeReviewsByMessages(messageIds: Iterable<string>): number {
+    const del = this.db.prepare('DELETE FROM reviews WHERE message_id = ?');
+    return this.db.transaction(() => {
+      let n = 0;
+      for (const id of messageIds) n += del.run(id).changes;
+      return n;
+    })();
+  }
+
+  /** Message édité : nouvelle note et nouveau texte, score et date gardés. */
+  updateReviewContent(messageId: string, rating: number, text: string): boolean {
+    return (
+      this.db
+        .prepare('UPDATE reviews SET rating = ?, text = ? WHERE message_id = ?')
+        .run(rating, text, messageId).changes > 0
+    );
+  }
+
   /** Vote 👍/👎 : delta ±1 sur le score. */
   applyVote(messageId: string, delta: number): void {
     this.db
       .prepare('UPDATE reviews SET score = score + ? WHERE message_id = ?')
       .run(delta, messageId);
+  }
+
+  /** Score recalculé depuis Discord (réactions vidées par la modération). */
+  setScore(messageId: string, score: number): boolean {
+    return (
+      this.db.prepare('UPDATE reviews SET score = ? WHERE message_id = ?').run(score, messageId)
+        .changes > 0
+    );
+  }
+
+  /**
+   * Post supprimé : le fil et ses reviews (cascade) sortent de l'index, et le
+   * slug redevient « sans post » pour le forum-sync, comme après un resync.
+   */
+  removeThread(threadId: string): boolean {
+    return this.db.prepare('DELETE FROM threads WHERE thread_id = ?').run(threadId).changes > 0;
   }
 
   /** Reviews d'un perso, meilleures d'abord (score puis récence) — l'ordre V2. */

@@ -8,13 +8,15 @@
  * en DB à la création — jamais déduit du nom du post.
  *
  * Tourne au boot, puis en cron (config.syncIntervalMs), et à la demande via
- * /sync. Réentrance : un seul sync à la fois (verrou process).
+ * /sync. Réentrance : un seul sync à la fois (un second est ignoré), et jamais
+ * pendant un resync (verrou partagé, cf. index-lock.ts : il attend la fin).
  */
 import { ChannelType, type Client, type ForumChannel } from 'discord.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import type { Store } from '../db/store.js';
 import { wiki, type WikiCharacter } from '../wiki/client.js';
+import { withIndexLock } from './index-lock.js';
 
 /** Délai entre deux créations de posts (rate limit Discord). */
 const CREATE_DELAY_MS = 2000;
@@ -70,56 +72,64 @@ export async function syncForumPosts(
   if (syncing) return { created: [], failed: [], total: 0 };
   syncing = true;
   try {
-    const characters = await wiki.getCharacters(force);
-    const known = store.knownSlugs();
-    const missing = characters.filter((c) => !known.has(c.slug));
-    const report: SyncReport = { created: [], failed: [], total: characters.length };
-    if (missing.length === 0) {
-      // Un passage SANS rien à créer est un sync réussi : il se date aussi
-      // (sinon /status et /health affichent « jamais synchronisé » à vie).
-      store.setMeta('lastForumSync', new Date().toISOString());
-      return report;
-    }
-
-    const forum = (await client.channels.fetch(config.reviews.forumChannelId)) as ForumChannel;
-    if (forum?.type !== ChannelType.GuildForum) {
-      throw new Error(`forum-sync : ${config.reviews.forumChannelId} n'est pas un forum`);
-    }
-
-    // Tags du forum par nom normalisé (élément/classe/rareté déjà créés).
-    const tagIds = new Map<string, string>();
-    for (const tag of forum.availableTags) tagIds.set(tag.name.toLowerCase(), tag.id);
-
-    for (const c of missing) {
-      const appliedTags = [
-        tagIds.get(c.element.toLowerCase()),
-        tagIds.get(c.class.toLowerCase()),
-        tagIds.get('★'.repeat(c.rarity)),
-      ].filter((t): t is string => Boolean(t));
-
-      try {
-        const thread = await forum.threads.create({
-          name: c.name,
-          autoArchiveDuration: 10080, // 1 semaine — l'archivage n'enlève rien au mapping
-          rateLimitPerUser: 60, // slow mode : 1 message / 60 s
-          message: { content: welcomeMessage(c) },
-          appliedTags,
-        });
-        store.registerThread(thread.id, c.slug);
-        report.created.push(c.slug);
-        logger.info('post forum créé', { slug: c.slug, threadId: thread.id });
-      } catch (e) {
-        report.failed.push(c.slug);
-        logger.error(`création du post ${c.slug} échouée`, e);
-      }
-      await new Promise((r) => setTimeout(r, CREATE_DELAY_MS));
-    }
-
-    store.setMeta('lastForumSync', new Date().toISOString());
-    return report;
+    return await withIndexLock(() => createMissingPosts(client, store, force));
   } finally {
     syncing = false;
   }
+}
+
+async function createMissingPosts(
+  client: Client,
+  store: Store,
+  force: boolean,
+): Promise<SyncReport> {
+  const characters = await wiki.getCharacters(force);
+  const known = store.knownSlugs();
+  const missing = characters.filter((c) => !known.has(c.slug));
+  const report: SyncReport = { created: [], failed: [], total: characters.length };
+  if (missing.length === 0) {
+    // Un passage SANS rien à créer est un sync réussi : il se date aussi
+    // (sinon /status et /health affichent « jamais synchronisé » à vie).
+    store.setMeta('lastForumSync', new Date().toISOString());
+    return report;
+  }
+
+  const forum = (await client.channels.fetch(config.reviews.forumChannelId)) as ForumChannel;
+  if (forum?.type !== ChannelType.GuildForum) {
+    throw new Error(`forum-sync : ${config.reviews.forumChannelId} n'est pas un forum`);
+  }
+
+  // Tags du forum par nom normalisé (élément/classe/rareté déjà créés).
+  const tagIds = new Map<string, string>();
+  for (const tag of forum.availableTags) tagIds.set(tag.name.toLowerCase(), tag.id);
+
+  for (const c of missing) {
+    const appliedTags = [
+      tagIds.get(c.element.toLowerCase()),
+      tagIds.get(c.class.toLowerCase()),
+      tagIds.get('★'.repeat(c.rarity)),
+    ].filter((t): t is string => Boolean(t));
+
+    try {
+      const thread = await forum.threads.create({
+        name: c.name,
+        autoArchiveDuration: 10080, // 1 semaine — l'archivage n'enlève rien au mapping
+        rateLimitPerUser: 60, // slow mode : 1 message / 60 s
+        message: { content: welcomeMessage(c) },
+        appliedTags,
+      });
+      store.registerThread(thread.id, c.slug);
+      report.created.push(c.slug);
+      logger.info('post forum créé', { slug: c.slug, threadId: thread.id });
+    } catch (e) {
+      report.failed.push(c.slug);
+      logger.error(`création du post ${c.slug} échouée`, e);
+    }
+    await new Promise((r) => setTimeout(r, CREATE_DELAY_MS));
+  }
+
+  store.setMeta('lastForumSync', new Date().toISOString());
+  return report;
 }
 
 /** Cron du sync — démarre la boucle périodique (et un premier passage). */

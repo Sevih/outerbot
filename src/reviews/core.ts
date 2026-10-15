@@ -63,13 +63,26 @@ export function sanitizeReviewText(text: string, maxLength: number): string {
   return Array.from(cleaned).slice(0, maxLength).join('').trim();
 }
 
+/** Ce que Discord dit d'une réaction : nombre total, et si le bot en est. */
+export interface ReactionTally {
+  count: number;
+  /** Le bot lui-même a posé cette réaction (son amorce). */
+  me: boolean;
+}
+
 /**
- * Score d'un message re-scanné depuis Discord : réactions 👍/👎 MOINS celles
- * du bot lui-même (il amorce chaque review avec les deux). Le resync passe par
- * ici — même règle que la V2.
+ * Score d'un message relu depuis Discord : votes 👍 moins votes 👎, SANS la
+ * réaction du bot. On retire la sienne seulement si elle est là (`me`) : une
+ * amorce ratée ou retirée à la main ne fausse plus le score de 1. Réaction
+ * absente = aucun vote.
  */
-export function scoreFromReactions(upvotes: number, downvotes: number): number {
-  return Math.max(0, upvotes - 1) - Math.max(0, downvotes - 1);
+export function scoreFromReactions(
+  up: ReactionTally | undefined,
+  down: ReactionTally | undefined,
+): number {
+  const votes = (r: ReactionTally | undefined): number =>
+    r ? Math.max(0, r.count - (r.me ? 1 : 0)) : 0;
+  return votes(up) - votes(down);
 }
 
 /** Règles de dépôt (issues de la config) que `reviewGate` applique. */

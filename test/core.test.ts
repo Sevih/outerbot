@@ -82,16 +82,26 @@ describe('sanitizeReviewText — rien d’exécutable ne passe, les emojis reste
 });
 
 describe('scoreFromReactions — les réactions du bot ne comptent pas', () => {
-  it('soustrait l’amorce du bot de chaque côté', () => {
+  const bot = (count: number) => ({ count, me: true });
+  const users = (count: number) => ({ count, me: false });
+
+  it('retire l’amorce du bot de chaque côté', () => {
     // Le bot pose 👍 et 👎 sur chaque review : 1/1 = personne n'a voté.
-    expect(scoreFromReactions(1, 1)).toBe(0);
-    expect(scoreFromReactions(4, 1)).toBe(3);
-    expect(scoreFromReactions(1, 3)).toBe(-2);
+    expect(scoreFromReactions(bot(1), bot(1))).toBe(0);
+    expect(scoreFromReactions(bot(4), bot(1))).toBe(3);
+    expect(scoreFromReactions(bot(1), bot(3))).toBe(-2);
   });
 
-  it('ne passe jamais sous zéro par côté (réaction du bot retirée à la main)', () => {
-    expect(scoreFromReactions(0, 0)).toBe(0);
-    expect(scoreFromReactions(0, 2)).toBe(-1);
+  it('amorce absente (réaction du bot ratée ou retirée) : chaque vote compte', () => {
+    expect(scoreFromReactions(users(2), bot(1))).toBe(2);
+    expect(scoreFromReactions(users(1), users(1))).toBe(0);
+    expect(scoreFromReactions(bot(1), users(2))).toBe(-2);
+  });
+
+  it('réaction absente : aucun vote de ce côté', () => {
+    expect(scoreFromReactions(undefined, undefined)).toBe(0);
+    expect(scoreFromReactions(undefined, users(2))).toBe(-2);
+    expect(scoreFromReactions(bot(3), undefined)).toBe(2);
   });
 });
 

@@ -3,8 +3,13 @@
  *
  * Cycle de vie d'une review :
  *   message dans un thread du forum  → parse X/5 → store + réactions ✅👍👎 ;
+ *   message édité                    → nouvelle note/texte, ou retirée si
+ *                                      elle n'est plus au format ;
  *   réaction 👍/👎 (hors bot)        → ±1 sur le score ;
- *   message supprimé                 → review supprimée.
+ *   réactions vidées (modération)    → score recalculé depuis Discord ;
+ *   message supprimé, ou purgé       → review supprimée ;
+ *   post supprimé                    → le post et ses reviews sortent de
+ *                                      l'index (le forum-sync le recréera).
  * Un message invalide est expliqué puis effacé (le thread reste propre) ; un
  * thread inconnu du mapping est ignoré en silence.
  */
@@ -22,6 +27,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import type { Store } from '../db/store.js';
 import { parseReview, reviewGate, sanitizeReviewText, type ReviewRejection } from './core.js';
+import { applyEdit, rescoreFromReactions } from './index-events.js';
 
 const REJECTION_MESSAGES: Record<ReviewRejection, string | null> = {
   duplicate: '⚠️ You already have a review for this character. Delete your previous one first.',
@@ -111,11 +117,38 @@ export function attachReviewListeners(client: Client, store: Store): void {
     void onMessage(message).catch((e) => logger.error('listener messageCreate en erreur', e));
   });
 
+  // Un message édité : la review suit (note, texte) ou sort de l'index si elle
+  // n'est plus au format. Un message qui n'est pas une review ne change rien.
+  client.on(Events.MessageUpdate, (oldMessage, newMessage) => {
+    if (newMessage.author.bot || newMessage.partial || newMessage.content == null) return;
+    if (!oldMessage.partial && oldMessage.content === newMessage.content) return; // aperçu de lien…
+    const outcome = applyEdit(
+      store,
+      newMessage.id,
+      newMessage.content,
+      config.reviews.maxTextLength,
+    );
+    if (outcome === 'not_a_review') return;
+    const what = outcome === 'updated' ? 'modifiée' : 'retirée (plus au format après édition)';
+    logger.info(`review ${what}`, { messageId: newMessage.id });
+  });
+
+  // Suppression par clé : pas besoin de savoir de quel salon vient le message
+  // (un fil hors cache n'a pas toujours son parent).
   client.on(Events.MessageDelete, (message: Message | PartialMessage) => {
-    const parentId = message.channel?.isThread() ? message.channel.parentId : null;
-    if (!inForum(parentId)) return;
     if (store.removeReviewByMessage(message.id)) {
       logger.info('review supprimée (message effacé)', { messageId: message.id });
+    }
+  });
+
+  client.on(Events.MessageBulkDelete, (messages) => {
+    const n = store.removeReviewsByMessages(messages.keys());
+    if (n > 0) logger.info('reviews supprimées (purge)', { count: n });
+  });
+
+  client.on(Events.ThreadDelete, (thread) => {
+    if (store.removeThread(thread.id)) {
+      logger.info('post supprimé — retiré de l’index avec ses reviews', { threadId: thread.id });
     }
   });
 
@@ -137,4 +170,24 @@ export function attachReviewListeners(client: Client, store: Store): void {
 
   client.on(Events.MessageReactionAdd, (reaction, user) => onReaction(reaction, user, true));
   client.on(Events.MessageReactionRemove, (reaction, user) => onReaction(reaction, user, false));
+
+  // Toutes les réactions retirées d'un coup : plus aucun vote.
+  client.on(Events.MessageReactionRemoveAll, (message) => {
+    store.setScore(message.id, 0);
+  });
+
+  // Une réaction 👍 ou 👎 vidée en entier : le score se relit sur Discord (le
+  // message en cache n'a pas forcément l'état des autres réactions).
+  client.on(Events.MessageReactionRemoveEmoji, (reaction) => {
+    const emoji = reaction.emoji.name;
+    if (emoji !== '👍' && emoji !== '👎') return;
+    const parentId = reaction.message.channel?.isThread()
+      ? reaction.message.channel.parentId
+      : null;
+    if (!inForum(parentId)) return;
+    void reaction.message
+      .fetch()
+      .then((message) => rescoreFromReactions(store, message.id, message.reactions.cache))
+      .catch((e) => logger.warn('score non recalculé après retrait d’une réaction', e));
+  });
 }

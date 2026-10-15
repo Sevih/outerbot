@@ -84,6 +84,45 @@ describe('Store', () => {
     expect(store.summary()).toEqual({ dahlia: { count: 2, average: 4.5 } });
   });
 
+  it('purge : chaque message purgé sort, les autres restent', () => {
+    store.addReview(review({ messageId: 'm1', userId: 'u1' }));
+    store.addReview(review({ messageId: 'm2', userId: 'u2' }));
+    store.addReview(review({ messageId: 'm3', userId: 'u3' }));
+    expect(store.removeReviewsByMessages(['m1', 'm3', 'pas-une-review'])).toBe(2);
+    expect(store.reviewsFor('dahlia').map((r) => r.id)).toEqual(['m2']);
+  });
+
+  it('édition : note et texte remplacés, score et date gardés', () => {
+    store.addReview(review({ score: 3 }));
+    expect(store.updateReviewContent('m1', 2.5, 'Moins bien qu’annoncé.')).toBe(true);
+    expect(store.reviewsFor('dahlia')[0]).toMatchObject({
+      rating: 2.5,
+      text: 'Moins bien qu’annoncé.',
+      score: 3,
+      timestamp: '2026-07-21T10:00:00.000Z',
+    });
+    expect(store.updateReviewContent('inconnu', 4, 'Rien.')).toBe(false);
+  });
+
+  it('setScore : score posé tel quel, sans effet hors review', () => {
+    store.addReview(review({ score: 4 }));
+    expect(store.setScore('m1', 0)).toBe(true);
+    expect(store.reviewsFor('dahlia')[0]!.score).toBe(0);
+    expect(store.setScore('inconnu', 2)).toBe(false);
+  });
+
+  it('post supprimé : le fil et ses reviews sortent, le slug redevient sans post', () => {
+    store.registerThread('t2', 'ame');
+    store.addReview(review({ messageId: 'm1', userId: 'u1' }));
+    store.addReview(review({ messageId: 'm2', userId: 'u2' }));
+    store.addReview(review({ messageId: 'm3', threadId: 't2', slug: 'ame', userId: 'u1' }));
+    expect(store.removeThread('t1')).toBe(true);
+    expect(store.reviewsFor('dahlia')).toEqual([]);
+    expect(store.knownSlugs()).toEqual(new Set(['ame']));
+    expect(store.reviewsFor('ame')).toHaveLength(1);
+    expect(store.removeThread('t1')).toBe(false);
+  });
+
   it('replaceAll : resync atomique — l’état final est exactement le scan', () => {
     store.addReview(review());
     store.replaceAll(
