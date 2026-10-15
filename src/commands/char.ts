@@ -4,6 +4,7 @@
  */
 import { EmbedBuilder, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { config } from '../config.js';
+import { fitLines } from '../lib/text.js';
 import { wiki } from '../wiki/client.js';
 import { safeAutocomplete } from './helpers.js';
 import type { Command } from './types.js';
@@ -106,12 +107,10 @@ export const charCommand: Command = {
         const build = store.buildThread(c.slug);
         const buildLink = build ? ` ([💬](<${threadUrl(build.threadId)}>))` : '';
         return `• [${c.name}](${config.siteBaseUrl}/characters/${c.slug})${buildLink}`;
-      })
-      .join('\n')
-      .slice(0, 2000);
+      });
 
     await interaction.reply({
-      content: `👥 **Characters (${filtered.length})**\n${lines}`,
+      content: fitLines(`👥 **Characters (${filtered.length})**`, lines),
       flags: MessageFlags.Ephemeral,
     });
   },

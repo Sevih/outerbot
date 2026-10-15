@@ -32,11 +32,13 @@ export function parseReview(content: string): { rating: number; text: string } |
   const lines = content.trim().split('\n');
   const firstLine = lines[0]!.trim();
 
-  // « 4/5 », « ⭐ 4.5/5 », « 3／5 » (slash pleine chasse des claviers CJK)…
-  const ratingMatch = firstLine.match(/^[⭐★☆\s]*(\d(?:\.\d)?)\s*[/／]\s*5/);
+  // « 4/5 », « ⭐ 4.5/5 », « 4,5/5 », « 3／5 » (slash pleine chasse des claviers
+  // CJK)… L'étoile peut porter le sélecteur de variante U+FE0F (« ⭐️ », inséré
+  // par beaucoup de claviers mobiles). Rien ne suit le 5 : « 4/50 » n'est pas 4/5.
+  const ratingMatch = firstLine.match(/^[\uFE0F⭐★☆\s]*(\d(?:[.,]\d)?)\s*[/／]\s*5(?!\d)/);
   if (!ratingMatch) return null;
 
-  const rating = parseFloat(ratingMatch[1]!);
+  const rating = parseFloat(ratingMatch[1]!.replace(',', '.'));
   if (rating < 1 || rating > 5) return null;
 
   const text = lines.slice(1).join('\n').trim();
@@ -51,13 +53,14 @@ export function parseReview(content: string): { rating: number; text: string } |
  * (rendus en images par la section du site), lignes vides compactées, borné.
  */
 export function sanitizeReviewText(text: string, maxLength: number): string {
-  return text
+  const cleaned = text
     .replace(/https?:\/\/\S+/gi, '')
     .replace(/<@[!&]?\d+>/g, '')
     .replace(/@(everyone|here)/g, '')
     .replace(/\n{3,}/g, '\n\n')
-    .substring(0, maxLength)
     .trim();
+  // Coupe par caractère (point de code), jamais au milieu d'un emoji.
+  return Array.from(cleaned).slice(0, maxLength).join('').trim();
 }
 
 /**
@@ -67,6 +70,41 @@ export function sanitizeReviewText(text: string, maxLength: number): string {
  */
 export function scoreFromReactions(upvotes: number, downvotes: number): number {
   return Math.max(0, upvotes - 1) - Math.max(0, downvotes - 1);
+}
+
+/** Règles de dépôt (issues de la config) que `reviewGate` applique. */
+export interface ReviewRules {
+  minAccountAgeDays: number;
+  /** Vide = tout le monde. */
+  allowedRoleIds: readonly string[];
+}
+
+/**
+ * Qui peut avoir une review dans l'index : compte assez ancien et, si des rôles
+ * sont configurés, l'un d'eux. Même règle pour le dépôt en direct et pour le
+ * resync. `memberRoleIds` à `null` = membre introuvable (parti du serveur) :
+ * refusé dès que des rôles sont requis.
+ */
+export function reviewGate(
+  authorCreatedAt: number,
+  memberRoleIds: readonly string[] | null,
+  now: number,
+  rules: ReviewRules,
+): { allowed: true } | { allowed: false; reason: string } {
+  const minMs = rules.minAccountAgeDays * 24 * 60 * 60 * 1000;
+  if (now - authorCreatedAt < minMs) {
+    return {
+      allowed: false,
+      reason: `Your Discord account must be at least ${rules.minAccountAgeDays} days old to post reviews.`,
+    };
+  }
+  if (
+    rules.allowedRoleIds.length > 0 &&
+    !rules.allowedRoleIds.some((id) => memberRoleIds?.includes(id))
+  ) {
+    return { allowed: false, reason: 'You do not have the required role to post reviews.' };
+  }
+  return { allowed: true };
 }
 
 /** Erreurs de dépôt — le listener les traduit en messages utilisateur. */

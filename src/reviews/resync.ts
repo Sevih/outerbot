@@ -14,16 +14,26 @@
  * Écriture ATOMIQUE en fin de scan (`store.replaceAll`) : un resync interrompu
  * ne laisse jamais une base à moitié vide.
  */
-import { ChannelType, type AnyThreadChannel, type Client, type ForumChannel } from 'discord.js';
+import {
+  ChannelType,
+  DiscordAPIError,
+  RESTJSONErrorCodes,
+  type AnyThreadChannel,
+  type Client,
+  type ForumChannel,
+  type Message,
+} from 'discord.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import type { NewReview, Store } from '../db/store.js';
 import { wiki } from '../wiki/client.js';
-import { parseReview, sanitizeReviewText, scoreFromReactions } from './core.js';
+import { parseReview, reviewGate, sanitizeReviewText, scoreFromReactions } from './core.js';
 
 export interface ResyncReport {
   threads: number;
   reviews: number;
+  /** Messages au bon format écartés par `reviewGate` (âge de compte, rôle). */
+  refused: number;
   /** Threads du forum qu'on n'a pas su relier à un perso (à /link à la main). */
   unresolved: string[];
 }
@@ -60,6 +70,30 @@ async function* allMessages(thread: AnyThreadChannel) {
   }
 }
 
+/**
+ * Rôles de l'auteur d'un message relu, mis en cache par utilisateur. Un message
+ * lu par l'API REST ne porte pas son membre : on le demande au serveur. `null`
+ * = plus membre du serveur ; toute autre erreur remonte (scan du thread
+ * incomplet, signalé), plutôt que d'écarter une review à tort.
+ */
+function memberRolesResolver(forum: ForumChannel) {
+  const byUser = new Map<string, string[] | null>();
+  return async (message: Message): Promise<string[] | null> => {
+    const userId = message.author.id;
+    if (!byUser.has(userId)) {
+      const member =
+        message.member ??
+        (await forum.guild.members.fetch(userId).catch((e: unknown) => {
+          if (e instanceof DiscordAPIError && e.code === RESTJSONErrorCodes.UnknownMember)
+            return null;
+          throw e;
+        }));
+      byUser.set(userId, member ? [...member.roles.cache.keys()] : null);
+    }
+    return byUser.get(userId)!;
+  };
+}
+
 export async function resyncFromDiscord(client: Client, store: Store): Promise<ResyncReport> {
   const forum = (await client.channels.fetch(config.reviews.forumChannelId)) as ForumChannel;
   if (forum?.type !== ChannelType.GuildForum) {
@@ -74,6 +108,11 @@ export async function resyncFromDiscord(client: Client, store: Store): Promise<R
   const threads: { threadId: string; slug: string }[] = [];
   const reviews: NewReview[] = [];
   const unresolved: string[] = [];
+  let refused = 0;
+  const memberRoles = memberRolesResolver(forum);
+  // Sans rôle requis, inutile d'interroger le serveur pour chaque auteur.
+  const needRoles = config.reviews.allowedRoleIds.length > 0;
+  const now = Date.now();
 
   for (const thread of await fetchAllThreads(forum)) {
     const slug = knownByThread.get(thread.id) ?? slugByName.get(thread.name.toLowerCase());
@@ -92,6 +131,17 @@ export async function resyncFromDiscord(client: Client, store: Store): Promise<R
         const text = sanitizeReviewText(parsed.text, config.reviews.maxTextLength);
         if (!text) continue;
         if (seenUsers.has(message.author.id)) continue; // un user, une review
+        // Même garde-fou que le dépôt en direct (listener).
+        const gate = reviewGate(
+          message.author.createdTimestamp,
+          needRoles ? await memberRoles(message) : null,
+          now,
+          config.reviews,
+        );
+        if (!gate.allowed) {
+          refused++;
+          continue;
+        }
         seenUsers.add(message.author.id);
 
         const up = message.reactions.cache.get('👍')?.count ?? 0;
@@ -118,7 +168,7 @@ export async function resyncFromDiscord(client: Client, store: Store): Promise<R
   store.replaceAll(threads, reviews);
   store.setMeta('lastResync', new Date().toISOString());
 
-  const report = { threads: threads.length, reviews: reviews.length, unresolved };
+  const report = { threads: threads.length, reviews: reviews.length, refused, unresolved };
   logger.info('resync terminé', report);
   return report;
 }

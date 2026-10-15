@@ -21,7 +21,7 @@ import { Events } from 'discord.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import type { Store } from '../db/store.js';
-import { parseReview, sanitizeReviewText, type ReviewRejection } from './core.js';
+import { parseReview, reviewGate, sanitizeReviewText, type ReviewRejection } from './core.js';
 
 const REJECTION_MESSAGES: Record<ReviewRejection, string | null> = {
   duplicate: '⚠️ You already have a review for this character. Delete your previous one first.',
@@ -30,24 +30,6 @@ const REJECTION_MESSAGES: Record<ReviewRejection, string | null> = {
   empty_after_sanitize: '❌ Your review text is empty after sanitization.',
   unknown_thread: null, // pas un thread de review — silence
 };
-
-/** Garde-fous de dépôt (âge de compte, rôles) — mêmes règles que le bot V2. */
-function canPostReview(message: Message): { allowed: boolean; reason?: string } {
-  const accountAgeMs = Date.now() - message.author.createdTimestamp;
-  const minMs = config.reviews.minAccountAgeDays * 24 * 60 * 60 * 1000;
-  if (accountAgeMs < minMs) {
-    return {
-      allowed: false,
-      reason: `Your Discord account must be at least ${config.reviews.minAccountAgeDays} days old to post reviews.`,
-    };
-  }
-  if (config.reviews.allowedRoleIds.length > 0 && message.member) {
-    const ok = config.reviews.allowedRoleIds.some((id) => message.member!.roles.cache.has(id));
-    if (!ok)
-      return { allowed: false, reason: 'You do not have the required role to post reviews.' };
-  }
-  return { allowed: true };
-}
 
 /** Répond, laisse lire, puis efface la question ET la réponse. */
 async function explainAndDelete(message: Message, text: string, ttlMs: number): Promise<void> {
@@ -102,7 +84,13 @@ export function attachReviewListeners(client: Client, store: Store): void {
     if (message.author.bot) return;
     if (!inForum(message.channel.isThread() ? message.channel.parentId : null)) return;
 
-    const gate = canPostReview(message);
+    // Garde-fous de dépôt (âge de compte, rôles) — les mêmes que le resync.
+    const gate = reviewGate(
+      message.author.createdTimestamp,
+      message.member ? [...message.member.roles.cache.keys()] : null,
+      Date.now(),
+      config.reviews,
+    );
     if (!gate.allowed) {
       await explainAndDelete(message, `❌ ${gate.reason}`, 10_000);
       return;

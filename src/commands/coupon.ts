@@ -38,8 +38,11 @@ import {
   canManageCoupons,
   codeChoices,
   dateChoices,
+  findCoupon,
   isDate,
+  isValidCode,
   MAX_REWARDS,
+  normalizeCode,
   popularRewards,
   rewardChoices,
   rewardsFromInputs,
@@ -116,8 +119,8 @@ async function buildOp(
   const sub = interaction.options.getSubcommand();
 
   if (sub === 'remove') {
-    const code = interaction.options.getString('code', true).trim();
-    const existing = (await couponApi.list(true)).find((c) => c.code === code);
+    const code = normalizeCode(interaction.options.getString('code', true));
+    const existing = findCoupon(await couponApi.list(true), code);
     if (!existing) return { error: `Code \`${code}\` not found.` };
     return { op: { action: 'remove', code }, preview: toRaw(existing), verb: 'Remove' };
   }
@@ -130,20 +133,20 @@ async function buildOp(
   if (sub === 'add') {
     // Même règle que l'écran `pnpm quick` : un code se saisit en majuscules.
     coupon = {
-      code: interaction.options.getString('code', true).trim().toUpperCase(),
+      code: normalizeCode(interaction.options.getString('code', true)),
       start: interaction.options.getString('start', true).trim(),
       end: interaction.options.getString('end', true).trim(),
       description: rewards.description,
     };
     op = { action: 'add', coupon };
   } else {
-    const code = interaction.options.getString('code', true).trim();
-    const existing = (await couponApi.list(true)).find((c) => c.code === code);
+    const code = normalizeCode(interaction.options.getString('code', true));
+    const existing = findCoupon(await couponApi.list(true), code);
     if (!existing) return { error: `Code \`${code}\` not found.` };
     const base = toRaw(existing);
     const hasRewards = Object.keys(rewards.description).length > 0;
     coupon = {
-      code: interaction.options.getString('new_code')?.trim().toUpperCase() || base.code,
+      code: normalizeCode(interaction.options.getString('new_code') ?? '') || base.code,
       start: interaction.options.getString('start')?.trim() || base.start,
       end: interaction.options.getString('end')?.trim() || base.end,
       // Des récompenses données REMPLACENT toutes les anciennes (sinon, inchangées).
@@ -152,6 +155,8 @@ async function buildOp(
     op = { action: 'edit', code, coupon };
   }
 
+  if (!isValidCode(coupon.code))
+    return { error: 'Invalid code: 4 to 32 letters or digits (A-Z, 0-9), nothing else.' };
   if (!isDate(coupon.start))
     return { error: `Invalid start date \`${coupon.start}\` (YYYY-MM-DD).` };
   if (!isDate(coupon.end)) return { error: `Invalid end date \`${coupon.end}\` (YYYY-MM-DD).` };

@@ -9,6 +9,8 @@
  * la stack). En dev, `tsx --env-file=.env` ou un export shell suffisent.
  */
 
+import { positiveNumber, rolesWithoutGuild } from './lib/env.js';
+
 function required(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`config : variable d'environnement requise absente : ${name}`);
@@ -27,11 +29,13 @@ function csv(name: string, fallback = ''): string[] {
     .filter(Boolean);
 }
 
+const guildId = required('GUILD_ID');
+
 export const config = {
   discord: {
     token: required('DISCORD_TOKEN'),
     clientId: required('CLIENT_ID'),
-    guildId: required('GUILD_ID'),
+    guildId,
     adminUserId: required('ADMIN_USER_ID'),
   },
 
@@ -39,9 +43,9 @@ export const config = {
     /** Forum #hero-reviews — un post par perso. */
     forumChannelId: required('REVIEW_FORUM_ID'),
     /** Âge de compte minimal pour poster (jours). */
-    minAccountAgeDays: Number(optional('REVIEW_MIN_AGE_DAYS', '30')),
+    minAccountAgeDays: positiveNumber('REVIEW_MIN_AGE_DAYS', 30, { allowZero: true }),
     /** Rôles requis pour poster (vide = tout le monde). */
-    allowedRoleIds: csv('REVIEW_ROLE_IDS'),
+    allowedRoleIds: rolesWithoutGuild('REVIEW_ROLE_IDS', csv('REVIEW_ROLE_IDS'), guildId),
     /** Guilds dont les emojis custom sont autorisés dans le texte. */
     allowedEmojiGuildIds: csv('REVIEW_EMOJI_GUILDS'),
     /** Longueur max du texte d'une review. */
@@ -58,7 +62,7 @@ export const config = {
   imgBaseUrl: optional('IMG_BASE_URL', 'https://img.outerpedia.com').replace(/\/$/, ''),
 
   http: {
-    port: Number(optional('HTTP_PORT', '3001')),
+    port: positiveNumber('HTTP_PORT', 3001),
   },
 
   db: {
@@ -66,11 +70,11 @@ export const config = {
   },
 
   /** Cadence du sync automatique persos → posts forum (ms). */
-  syncIntervalMs: Number(optional('SYNC_INTERVAL_HOURS', '6')) * 60 * 60 * 1000,
+  syncIntervalMs: positiveNumber('SYNC_INTERVAL_HOURS', 6) * 60 * 60 * 1000,
 
   coupons: {
     /** Rôles staff autorisés à /coupon (l'admin du bot l'est toujours). */
-    staffRoleIds: csv('STAFF_ROLE_IDS'),
+    staffRoleIds: rolesWithoutGuild('STAFF_ROLE_IDS', csv('STAFF_ROLE_IDS'), guildId),
     /**
      * Jeton partagé avec la route interne du site (`/api/internal/coupons`).
      * Vide = /coupon répond « non configurée » ; le bot démarre quand même.
@@ -89,7 +93,7 @@ export const config = {
      * Cadence de la vérification (ms). Les routes du site n'ont aucun cache :
      * c'est le SEUL délai entre la sauvegarde d'un code et son annonce.
      */
-    intervalMs: Number(optional('ANNOUNCE_INTERVAL_SECONDS', '60')) * 1000,
+    intervalMs: positiveNumber('ANNOUNCE_INTERVAL_SECONDS', 60) * 1000,
   },
 } as const;
 

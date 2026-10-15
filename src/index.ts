@@ -1,10 +1,11 @@
 /**
  * outerbot — point d'entrée. Ordre de boot :
  *   1. config (fail-fast si un secret manque) → db → client Discord ;
- *   2. à la connexion : listeners reviews, boucle de forum-sync, boucle
- *      d'annonces (coupons + journal du site), API HTTP ;
+ *   2. à la connexion : listeners reviews, boucle d'annonces (coupons +
+ *      journal du site), API HTTP, boucle de forum-sync ;
  *   3. si la base est VIDE de threads (premier démarrage / migration), un
- *      resync complet depuis Discord reconstruit l'index tout seul.
+ *      resync complet depuis Discord reconstruit l'index tout seul, AVANT le
+ *      forum-sync, et se retente tant qu'il échoue.
  * Arrêt propre sur SIGTERM/SIGINT (Docker stop).
  */
 import { Client, Events, GatewayIntentBits, MessageFlags, Partials } from 'discord.js';
@@ -18,6 +19,7 @@ import { attachReviewListeners } from './reviews/listener.js';
 import { startForumSyncLoop } from './reviews/forum-sync.js';
 import { startAnnounceLoop } from './announce/announcer.js';
 import { resyncFromDiscord } from './reviews/resync.js';
+import { indexThenStart } from './reviews/boot.js';
 import { startHttpServer } from './http/server.js';
 
 const db = openDb(config.db.path);
@@ -40,16 +42,20 @@ attachReviewListeners(client, store);
 client.once(Events.ClientReady, (ready) => {
   logger.info(`connecté : ${ready.user.tag}`);
 
-  // Migration/réparation : base sans threads → reconstruction depuis Discord.
-  const boot = async (): Promise<void> => {
-    if (store.knownSlugs().size === 0) {
-      logger.info('base vide — resync complet depuis Discord…');
-      await resyncFromDiscord(client, store);
-    }
-    startForumSyncLoop(client, store);
-    startAnnounceLoop(client, store);
-  };
-  void boot().catch((e) => logger.error('boot échoué', e));
+  // Les annonces ne dépendent pas de l'index des reviews : elles partent tout
+  // de suite, quoi qu'il arrive au resync.
+  startAnnounceLoop(client, store);
+
+  // Base sans threads (premier démarrage, volume perdu) : resync AVANT le
+  // forum-sync, retenté chaque minute tant qu'il échoue (cf. reviews/boot.ts).
+  if (store.knownSlugs().size === 0) logger.info('base vide — resync complet depuis Discord…');
+  void indexThenStart({
+    isEmpty: () => store.knownSlugs().size === 0,
+    resync: () => resyncFromDiscord(client, store),
+    start: () => startForumSyncLoop(client, store),
+    onError: (e) => logger.error('resync de démarrage échoué — nouvel essai dans 1 min', e),
+    retryMs: 60_000,
+  });
 });
 
 client.on(Events.InteractionCreate, (interaction) => {

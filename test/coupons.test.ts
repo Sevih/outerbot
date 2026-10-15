@@ -7,7 +7,10 @@ import {
   canManageCoupons,
   codeChoices,
   dateChoices,
+  findCoupon,
   isDate,
+  isValidCode,
+  normalizeCode,
   popularRewards,
   rewardsFromInputs,
   toAnnouncement,
@@ -109,6 +112,39 @@ describe('codes existants', () => {
     ]);
     expect(codeChoices(list, 'ne', '2026-09-25').map((c) => c.value)).toEqual(['NEWER']);
     expect(codeChoices(list, '', '2026-09-25')[2]?.name).toContain('expired');
+  });
+
+  it('edit/remove retrouvent un code tapé en minuscules ou avec des blancs', () => {
+    const list = [live({ code: 'GOLDMOONPTY' }), live({ code: '24KTHANKYOU' })];
+    expect(findCoupon(list, 'goldmoonpty')?.code).toBe('GOLDMOONPTY');
+    expect(findCoupon(list, '  24kThankYou ')?.code).toBe('24KTHANKYOU');
+    expect(findCoupon(list, 'NOPE')).toBeUndefined();
+  });
+});
+
+describe('forme d’un code', () => {
+  it('majuscules, sans blancs autour', () => {
+    expect(normalizeCode('  goldMoon26 ')).toBe('GOLDMOON26');
+  });
+  it('4 à 32 lettres ou chiffres', () => {
+    expect(isValidCode('GOLDMOONPTY')).toBe(true);
+    expect(isValidCode('24KTHANKYOU')).toBe(true);
+    expect(isValidCode('ABCD')).toBe(true);
+    expect(isValidCode('A'.repeat(32))).toBe(true);
+    expect(isValidCode('ABC')).toBe(false);
+    expect(isValidCode('A'.repeat(33))).toBe(false);
+  });
+  it('refuse tout autre caractère : backtick, espace, crochet, lien', () => {
+    expect(isValidCode('GIFT`X')).toBe(false);
+    expect(isValidCode('GIFT CODE')).toBe(false);
+    expect(isValidCode('[GIFT]')).toBe(false);
+    expect(isValidCode(normalizeCode('gift` [claim](https://x.example) `x'))).toBe(false);
+    expect(isValidCode('CODE-2026')).toBe(false);
+    expect(isValidCode('CODÉ2026')).toBe(false);
+  });
+  it('se juge après majuscules : un code minuscule valide passe', () => {
+    expect(isValidCode('goldmoon')).toBe(false);
+    expect(isValidCode(normalizeCode('goldmoon'))).toBe(true);
   });
 });
 

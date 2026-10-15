@@ -33,6 +33,23 @@ export function canManageCoupons(
   return userId === adminUserId || memberRoleIds.some((r) => staffRoleIds.includes(r));
 }
 
+/**
+ * Un code s'écrit en majuscules, sans blancs autour : forme sous laquelle le
+ * site range tous les codes, donc aussi la clé de recherche d'edit/remove.
+ */
+export const normalizeCode = (code: string): string => code.trim().toUpperCase();
+
+/** 4 à 32 lettres ou chiffres, après majuscules — même règle que le site à l'écriture. */
+const CODE_RE = /^[A-Z0-9]{4,32}$/;
+
+export const isValidCode = (code: string): boolean => CODE_RE.test(code);
+
+/** Le code visé par edit/remove, tel que tapé (minuscules, blancs) ou choisi. */
+export const findCoupon = (list: LiveCoupon[], typed: string): LiveCoupon | undefined => {
+  const code = normalizeCode(typed);
+  return list.find((c) => c.code === code);
+};
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** `YYYY-MM-DD` ET date réelle (pas de 2026-02-30). */

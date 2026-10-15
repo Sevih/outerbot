@@ -99,6 +99,9 @@ export const adminCommand: Command = {
       const report = await resyncFromDiscord(interaction.client, store);
       await interaction.editReply(
         `✅ Resync : ${report.reviews} review(s) sur ${report.threads} thread(s).` +
+          (report.refused
+            ? ` ${report.refused} écartée(s) (âge de compte ou rôle de dépôt).`
+            : '') +
           (report.unresolved.length
             ? `\n⚠ Threads non reliés (à /admin link ou renommer) : ${report.unresolved.join(', ')}`
             : ''),
