@@ -11,18 +11,23 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: sevih/outerbot # doit être en minuscules pour GHCR
 
+# Par défaut, le jeton du workflow ne fait que lire ; le job `docker` élargit
+# à `packages: write` pour publier l'image.
+permissions:
+  contents: read
+
 jobs:
   # Vérifications de qualité (sur PR et push) — même chaîne que le site.
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Sans `version:`, l'action lit "packageManager" de package.json — la
       # version de pnpm se déclare à UN seul endroit (même règle que le site).
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # .nvmrc = seule source de vérité de la version Node.
           node-version-file: .nvmrc
@@ -46,17 +51,17 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: true
@@ -76,32 +81,35 @@ jobs:
     # Sérialise les deploys de CE repo (deux pushes rapprochés = deux
     # `compose up` simultanés qui se percutent — vécu côté site le 30/07,
     # cf. son ci.yml). La course INTER-repos (le site déploie la même stack)
-    # est tenue par le flock côté VPS, dans le script ci-dessous.
+    # est tenue par le flock côté VPS, dans `scripts/deploy.sh` de sevih-tool.
     concurrency:
       group: deploy-prod
       cancel-in-progress: false
+    # Le script attend le verrou 10 min au plus, puis pull et up : 20 min couvrent.
+    timeout-minutes: 20
     steps:
       - name: Déploiement SSH sur le VPS
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            # Sans `set -e`, un `compose up` en échec serait masqué par le code
-            # de retour du `prune` final (cf. ci.yml du site pour le détail).
-            set -e
-            export PATH="$HOME/.local/bin:$PATH"
-            cd ~/sevih-tool
-            # VERROU inter-repos (même fichier que le ci.yml du site) : un seul
-            # déploiement de la stack à la fois sur le VPS, d'où qu'il vienne.
-            # 10 min d'attente max (= command_timeout), puis échec franc.
-            exec 9>/tmp/deploy-stack.lock
-            flock -w 600 9
-            # Régénère stack/.env depuis le coffre chiffré (le compose exige des
-            # variables `${VAR:?}` — resynchronisé à chaque déploiement).
-            ./scripts/secrets-decrypt.sh
-            cd stack
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
+        # Pas d'action tierce : la clé de déploiement ne passe que par `ssh`.
+        # Côté VPS, cette clé est en commande FORCÉE (`restrict,command=` dans
+        # authorized_keys) : elle ne peut lancer que `scripts/deploy.sh` de
+        # sevih-tool, qui ne lit que le dernier mot de la commande (le service,
+        # pris dans une liste blanche) et ne redéploie que lui. Le flock
+        # inter-dépôts, le déchiffrement de stack/.env, `pull`, `up -d` et
+        # `prune` vivent dans ce script.
+        # L'empreinte du serveur est vérifiée : `VPS_KNOWN_HOSTS` porte sa ligne
+        # de known_hosts sous l'alias `vps` (`HostKeyAlias`), quelle que soit la
+        # forme de `VPS_HOST` ; pas de confiance au premier contact.
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes -o HostKeyAlias=vps \
+            -o ServerAliveInterval=30 \
+            "$VPS_USER@$VPS_HOST" bash ~/sevih-tool/scripts/deploy.sh outerbot
