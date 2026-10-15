@@ -112,4 +112,4 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o BatchMode=yes -o StrictHostKeyChecking=yes -o HostKeyAlias=vps \
             -o ServerAliveInterval=30 \
-            "$VPS_USER@$VPS_HOST" bash ~/sevih-tool/scripts/deploy.sh outerbot
+            "$VPS_USER@$VPS_HOST" 'bash ~/sevih-tool/scripts/deploy.sh outerbot'
