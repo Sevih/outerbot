@@ -164,6 +164,14 @@ export class WikiClient {
     return this.cached(this.characters, '/api/bot/characters', (e) => (this.characters = e), force);
   }
 
+  /**
+   * Liste en cache telle quelle, même périmée, SANS fetch (undefined si rien
+   * encore) : pour l'API HTTP, que le site interroge avec un délai de 2 s.
+   */
+  peekCharacters(): WikiCharacter[] | undefined {
+    return this.characters?.data;
+  }
+
   getGuides(force = false): Promise<WikiGuide[]> {
     return this.cached(this.guides, '/api/bot/guides', (e) => (this.guides = e), force);
   }

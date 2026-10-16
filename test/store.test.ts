@@ -1,6 +1,6 @@
 /**
  * Store SQLite — sur base mémoire : migrations, contrat de sortie (identique
- * V2), dédup par (slug, user), votes, resync atomique.
+ * V2), dédup par (perso, user), votes, resync atomique, remplissage des ids.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDb } from '../src/db/db.js';
@@ -10,6 +10,7 @@ function review(over: Partial<NewReview> = {}): NewReview {
   return {
     messageId: 'm1',
     threadId: 't1',
+    characterId: '1',
     slug: 'dahlia',
     userId: 'u1',
     username: 'sevih',
@@ -27,19 +28,20 @@ describe('Store', () => {
 
   beforeEach(() => {
     store = new Store(openDb(':memory:'));
-    store.registerThread('t1', 'dahlia');
+    store.registerThread('t1', '1', 'dahlia');
   });
 
-  it('threads : enregistrement, lookup, slugs connus', () => {
-    expect(store.slugForThread('t1')).toBe('dahlia');
-    expect(store.slugForThread('inconnu')).toBeUndefined();
-    store.registerThread('t2', 'ame');
-    expect(store.knownSlugs()).toEqual(new Set(['dahlia', 'ame']));
+  it('threads : enregistrement, lookup, ids connus', () => {
+    expect(store.characterForThread('t1')).toEqual({ characterId: '1', slug: 'dahlia' });
+    expect(store.characterForThread('inconnu')).toBeUndefined();
+    store.registerThread('t2', '2', 'ame');
+    expect(store.knownCharacterIds()).toEqual(new Set(['1', '2']));
+    expect(store.countThreads()).toBe(2);
   });
 
   it('reviews : le contrat de sortie est celui de la V2 (champ à champ)', () => {
     store.addReview(review());
-    expect(store.reviewsFor('dahlia')).toEqual([
+    expect(store.reviewsFor('1')).toEqual([
       {
         id: 'm1',
         userId: 'u1',
@@ -55,10 +57,14 @@ describe('Store', () => {
     ]);
   });
 
-  it('dédup : une seule review par (perso, utilisateur) — contrainte DB', () => {
+  it('dédup : une seule review par (perso, utilisateur) — contrainte DB, par id', () => {
     store.addReview(review());
-    expect(store.hasReview('dahlia', 'u1')).toBe(true);
-    expect(() => store.addReview(review({ messageId: 'm2' }))).toThrow();
+    expect(store.hasReview('1', 'u1')).toBe(true);
+    expect(store.hasReview('1', 'u2')).toBe(false);
+    // Même perso sous un autre slug (renommé) : refusé par l'id.
+    expect(() => store.addReview(review({ messageId: 'm2', slug: 'dahlia-renamed' }))).toThrow(
+      /character_id/,
+    );
   });
 
   it('votes : delta appliqué ; tri score puis récence', () => {
@@ -67,7 +73,7 @@ describe('Store', () => {
     store.applyVote('m1', 1);
     store.applyVote('m1', 1);
     store.applyVote('m2', -1);
-    const [first, second] = store.reviewsFor('dahlia');
+    const [first, second] = store.reviewsFor('1');
     expect(first!.id).toBe('m1');
     expect(first!.score).toBe(2);
     expect(second!.score).toBe(-1);
@@ -89,13 +95,13 @@ describe('Store', () => {
     store.addReview(review({ messageId: 'm2', userId: 'u2' }));
     store.addReview(review({ messageId: 'm3', userId: 'u3' }));
     expect(store.removeReviewsByMessages(['m1', 'm3', 'pas-une-review'])).toBe(2);
-    expect(store.reviewsFor('dahlia').map((r) => r.id)).toEqual(['m2']);
+    expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m2']);
   });
 
   it('édition : note et texte remplacés, score et date gardés', () => {
     store.addReview(review({ score: 3 }));
     expect(store.updateReviewContent('m1', 2.5, 'Moins bien qu’annoncé.')).toBe(true);
-    expect(store.reviewsFor('dahlia')[0]).toMatchObject({
+    expect(store.reviewsFor('1')[0]).toMatchObject({
       rating: 2.5,
       text: 'Moins bien qu’annoncé.',
       score: 3,
@@ -107,40 +113,52 @@ describe('Store', () => {
   it('setScore : score posé tel quel, sans effet hors review', () => {
     store.addReview(review({ score: 4 }));
     expect(store.setScore('m1', 0)).toBe(true);
-    expect(store.reviewsFor('dahlia')[0]!.score).toBe(0);
+    expect(store.reviewsFor('1')[0]!.score).toBe(0);
     expect(store.setScore('inconnu', 2)).toBe(false);
   });
 
   it('post supprimé : le fil et ses reviews sortent, le slug redevient sans post', () => {
-    store.registerThread('t2', 'ame');
+    store.registerThread('t2', '2', 'ame');
     store.addReview(review({ messageId: 'm1', userId: 'u1' }));
     store.addReview(review({ messageId: 'm2', userId: 'u2' }));
-    store.addReview(review({ messageId: 'm3', threadId: 't2', slug: 'ame', userId: 'u1' }));
+    store.addReview(
+      review({ messageId: 'm3', threadId: 't2', characterId: '2', slug: 'ame', userId: 'u1' }),
+    );
     expect(store.removeThread('t1')).toBe(true);
-    expect(store.reviewsFor('dahlia')).toEqual([]);
-    expect(store.knownSlugs()).toEqual(new Set(['ame']));
-    expect(store.reviewsFor('ame')).toHaveLength(1);
+    expect(store.reviewsFor('1')).toEqual([]);
+    expect(store.knownCharacterIds()).toEqual(new Set(['2']));
+    expect(store.reviewsFor('2')).toHaveLength(1);
     expect(store.removeThread('t1')).toBe(false);
   });
 
   it('replaceAll : resync atomique — l’état final est exactement le scan', () => {
     store.addReview(review());
     store.replaceAll(
-      [{ threadId: 't9', slug: 'ame' }],
-      [review({ messageId: 'm9', threadId: 't9', slug: 'ame', userId: 'u9', score: 5 })],
+      [{ threadId: 't9', characterId: '2', slug: 'ame' }],
+      [
+        review({
+          messageId: 'm9',
+          threadId: 't9',
+          characterId: '2',
+          slug: 'ame',
+          userId: 'u9',
+          score: 5,
+        }),
+      ],
     );
-    expect(store.reviewsFor('dahlia')).toEqual([]);
-    expect(store.slugForThread('t1')).toBeUndefined();
-    expect(store.reviewsFor('ame')).toHaveLength(1);
-    expect(store.reviewsFor('ame')[0]!.score).toBe(5);
+    expect(store.reviewsFor('1')).toEqual([]);
+    expect(store.characterForThread('t1')).toBeUndefined();
+    expect(store.reviewsFor('2')).toHaveLength(1);
+    expect(store.reviewsFor('2')[0]!.score).toBe(5);
   });
 
   it('builds curés : set/get/remove (ex-threads.json)', () => {
-    store.setBuildThread('dahlia', '111', '222');
-    expect(store.buildThread('dahlia')).toEqual({ threadId: '111', infoThreadId: '222' });
-    store.setBuildThread('dahlia', '333');
-    expect(store.buildThread('dahlia')).toEqual({ threadId: '333', infoThreadId: null });
-    expect(store.removeBuildThread('dahlia')).toBe(true);
-    expect(store.buildThread('dahlia')).toBeUndefined();
+    store.setBuildThread('1', 'dahlia', '111', '222');
+    expect(store.buildThread('1')).toEqual({ threadId: '111', infoThreadId: '222' });
+    // Même id, slug renommé : la ligne est mise à jour, pas doublée.
+    store.setBuildThread('1', 'dahlia-renamed', '333');
+    expect(store.buildThread('1')).toEqual({ threadId: '333', infoThreadId: null });
+    expect(store.removeBuildThread('1')).toBe(true);
+    expect(store.buildThread('1')).toBeUndefined();
   });
 });

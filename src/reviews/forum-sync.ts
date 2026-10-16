@@ -2,10 +2,16 @@
  * Forum-sync — LA fin de la procédure manuelle du bot V2 (« npm run update »,
  * commit, push, restart PM2 à chaque perso).
  *
- * Compare les persos du wiki (API interne) aux posts déjà mappés en DB, et
- * crée les posts forum MANQUANTS : tags élément/classe/rareté, message
- * d'accueil avec le format attendu et le lien wiki. Le slug canonique est posé
- * en DB à la création — jamais déduit du nom du post.
+ * Compare les persos du wiki (API interne) aux posts déjà mappés en DB, PAR
+ * ID, et crée les posts forum MANQUANTS : tags élément/classe/rareté, message
+ * d'accueil avec le format attendu et le lien wiki. L'id du perso (et son slug,
+ * pour l'affichage) est posé en DB à la création — jamais déduit du nom du
+ * post. Un perso renommé garde donc son post.
+ *
+ * Chaque passage commence par remplir les ids des lignes qui n'en ont pas
+ * encore (base d'avant v3, cf. Store.backfillCharacterIds) : sans ça, juste
+ * après la migration, aucun post ne serait connu par id et chaque perso en
+ * recevrait un second.
  *
  * Tourne au boot, puis en cron (config.syncIntervalMs), et à la demande via
  * /sync. Réentrance : un seul sync à la fois (un second est ignoré), et jamais
@@ -57,6 +63,18 @@ export function welcomeMessage(c: WikiCharacter, siteBaseUrl: string): string {
 
 const cap = (s: string): string => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
+/**
+ * Remplit les ids manquants d'après la liste du site ; les slugs qu'elle ne
+ * connaît pas sont journalisés (et montrés par /status). Appelé sous le verrou
+ * de l'index, par le forum-sync et le resync.
+ */
+export function fillCharacterIds(store: Store, characters: readonly WikiCharacter[]): void {
+  const unresolved = store.backfillCharacterIds(characters);
+  if (unresolved.length) {
+    logger.warn(`index : ${unresolved.length} slug(s) sans id de perso`, { unresolved });
+  }
+}
+
 export interface SyncReport {
   created: string[];
   failed: string[];
@@ -86,8 +104,9 @@ async function createMissingPosts(
   force: boolean,
 ): Promise<SyncReport> {
   const characters = await wiki.getCharacters(force);
-  const known = store.knownSlugs();
-  const missing = characters.filter((c) => !known.has(c.slug));
+  fillCharacterIds(store, characters);
+  const known = store.knownCharacterIds();
+  const missing = characters.filter((c) => !known.has(c.id));
   const report: SyncReport = { created: [], failed: [], total: characters.length };
   if (missing.length === 0) {
     // Un passage SANS rien à créer est un sync réussi : il se date aussi
@@ -120,7 +139,7 @@ async function createMissingPosts(
         message: { content: welcomeMessage(c, config.siteBaseUrl) },
         appliedTags,
       });
-      store.registerThread(thread.id, c.slug);
+      store.registerThread(thread.id, c.id, c.slug);
       report.created.push(c.slug);
       logger.info('post forum créé', { slug: c.slug, threadId: thread.id });
     } catch (e) {

@@ -13,12 +13,19 @@
  *
  * Migrations : un tableau ordonné de scripts, `user_version` comme curseur.
  * Ajouter une migration = pousser un élément — jamais modifier un existant.
+ *
+ * Clé d'un perso : son ID (`WikiCharacter.id`, stable), depuis v3. Le slug,
+ * dérivé du nom anglais affiché et recalculé à chaque build du site, change
+ * quand le jeu renomme un perso : il ne sert plus qu'à l'affichage et au repli
+ * (lignes pas encore remplies, site injoignable). Les commentaires de v1
+ * décrivent le schéma d'alors ; v3 dit ce qui change.
  */
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-const MIGRATIONS: string[] = [
+/** Exporté pour les tests (une base d'une version donnée). */
+export const MIGRATIONS: readonly string[] = [
   // v1 — schéma initial.
   `
   -- Un post du forum #hero-reviews ↔ un perso du wiki. Le slug est POSÉ par le
@@ -77,6 +84,30 @@ const MIGRATIONS: string[] = [
     announced_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (kind, key)
   );
+  `,
+
+  // v3 — l'id du perso devient la clé ; le slug n'est plus que l'affichage.
+  `
+  -- Colonnes AJOUTÉES, tables gardées : sous foreign_keys = ON, reconstruire
+  -- threads (DROP TABLE) effacerait les reviews par la cascade de
+  -- reviews.thread_id, et PRAGMA foreign_keys est sans effet dans la
+  -- transaction d'une migration. character_id reste NULL jusqu'au remplissage
+  -- (Store.backfillCharacterIds, en tête de chaque forum-sync et resync, avec
+  -- la liste de persos du site) ; plusieurs NULL passent un index unique.
+  --
+  -- Les contraintes de v1 sur slug (threads.slug UNIQUE, reviews UNIQUE (slug,
+  -- user_id), build_threads.slug clé primaire) restent. Leur seul effet
+  -- désormais : une collision si le slug libéré par un renommage est repris
+  -- par un autre perso tant que l'ancienne ligne le porte encore (un resync
+  -- réécrit le slug courant de chaque post).
+  ALTER TABLE threads ADD COLUMN character_id TEXT;
+  ALTER TABLE reviews ADD COLUMN character_id TEXT;
+  ALTER TABLE build_threads ADD COLUMN character_id TEXT;
+
+  -- Un post par perso, une review par (perso, membre), un lien de build par perso.
+  CREATE UNIQUE INDEX idx_threads_character ON threads(character_id);
+  CREATE UNIQUE INDEX idx_reviews_character_user ON reviews(character_id, user_id);
+  CREATE UNIQUE INDEX idx_build_threads_character ON build_threads(character_id);
   `,
 ];
 

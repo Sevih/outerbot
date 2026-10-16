@@ -50,9 +50,12 @@ async function explainAndDelete(message: Message, text: string, ttlMs: number): 
 
 /** Tente le dépôt d'une review depuis un message ; renvoie l'erreur éventuelle. */
 export function tryAddReview(store: Store, message: Message): ReviewRejection | null {
-  const slug = store.slugForThread(message.channelId);
-  if (!slug) return 'unknown_thread';
-  if (store.hasReview(slug, message.author.id)) return 'duplicate';
+  // Un post pas encore rempli (id NULL) passe pour inconnu : le forum-sync de
+  // démarrage le remplit dans la foulée, un resync rattrape ce qui serait passé.
+  const thread = store.characterForThread(message.channelId);
+  if (!thread) return 'unknown_thread';
+  const { characterId, slug } = thread;
+  if (store.hasReview(characterId, message.author.id)) return 'duplicate';
 
   const parsed = parseReview(message.content);
   if (!parsed) return 'bad_format';
@@ -63,6 +66,7 @@ export function tryAddReview(store: Store, message: Message): ReviewRejection | 
   store.addReview({
     messageId: message.id,
     threadId: message.channelId,
+    characterId,
     slug,
     userId: message.author.id,
     username: message.author.username,
@@ -72,7 +76,12 @@ export function tryAddReview(store: Store, message: Message): ReviewRejection | 
     text,
     createdAt: message.createdAt.toISOString(),
   });
-  logger.info('review ajoutée', { slug, userId: message.author.id, rating: parsed.rating });
+  logger.info('review ajoutée', {
+    characterId,
+    slug,
+    userId: message.author.id,
+    rating: parsed.rating,
+  });
   return null;
 }
 

@@ -1,6 +1,8 @@
 /**
  * Resync sur un faux forum (aucun appel à Discord ni au site) : il reconstruit
- * le même index que le direct, et ne se croise pas avec le forum-sync.
+ * le même index que le direct, et ne se croise pas avec le forum-sync. Forum-sync
+ * et resync remplissent les ids d'abord : ni la migration v3 ni un renommage
+ * ne créent de post en double.
  */
 import { ChannelType, Collection, type Client } from 'discord.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +28,7 @@ import { openDb } from '../src/db/db.js';
 import { Store } from '../src/db/store.js';
 import { resyncFromDiscord } from '../src/reviews/resync.js';
 import { syncForumPosts } from '../src/reviews/forum-sync.js';
+import { tryAddReview } from '../src/reviews/listener.js';
 import type { WikiCharacter } from '../src/wiki/client.js';
 
 const DAHLIA: WikiCharacter = {
@@ -66,10 +69,10 @@ function msg(
 }
 
 /** Faux client : un forum, un fil, ses messages du plus récent au plus ancien. */
-function fakeClient(messages: ReturnType<typeof msg>[]) {
+function fakeClient(messages: ReturnType<typeof msg>[], threadName = 'Dahlia') {
   const thread = {
     id: 't1',
-    name: 'Dahlia',
+    name: threadName,
     messages: {
       fetch: () => Promise.resolve(new Collection(messages.map((m) => [m.id, m]))),
     },
@@ -89,7 +92,7 @@ let store: Store;
 
 beforeEach(() => {
   store = new Store(openDb(':memory:'));
-  store.registerThread('t1', 'dahlia');
+  store.registerThread('t1', '1', 'dahlia');
   getCharacters.mockReset();
   getCharacters.mockResolvedValue([DAHLIA]);
 });
@@ -103,7 +106,7 @@ describe('resyncFromDiscord — même index que le direct', () => {
     ]);
     const report = await resyncFromDiscord(client, store);
     expect(report.reviews).toBe(2);
-    const byUser = Object.fromEntries(store.reviewsFor('dahlia').map((r) => [r.userId, r]));
+    const byUser = Object.fromEntries(store.reviewsFor('1').map((r) => [r.userId, r]));
     expect(byUser.u1).toMatchObject({ id: 'm1', rating: 4, text: 'Premier avis.' });
     expect(byUser.u2).toMatchObject({ id: 'm2' });
   });
@@ -114,7 +117,7 @@ describe('resyncFromDiscord — même index que le direct', () => {
       msg('m1', 'u1', 'bonjour', '2026-07-01T00:00:00Z'),
     ]);
     await resyncFromDiscord(client, store);
-    expect(store.reviewsFor('dahlia').map((r) => r.id)).toEqual(['m2']);
+    expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m2']);
   });
 
   it('score : la réaction du bot n’est retirée que si elle est là', async () => {
@@ -130,7 +133,7 @@ describe('resyncFromDiscord — même index que le direct', () => {
       ]),
     ]);
     await resyncFromDiscord(client, store);
-    const score = Object.fromEntries(store.reviewsFor('dahlia').map((r) => [r.id, r.score]));
+    const score = Object.fromEntries(store.reviewsFor('1').map((r) => [r.id, r.score]));
     expect(score).toEqual({ m1: 2, m2: 2 });
   });
 });
@@ -151,6 +154,96 @@ describe('resync et forum-sync passent l’un après l’autre', () => {
     await sync;
     await resync;
     expect(fetchChannel).toHaveBeenCalledOnce();
-    expect(store.knownSlugs()).toEqual(new Set(['dahlia']));
+    expect(store.knownCharacterIds()).toEqual(new Set(['1']));
+  });
+});
+
+/** Une review de dahlia (t1) telle que l'index la porte. */
+function indexedReview(characterId: string | null, slug: string) {
+  return {
+    messageId: 'm1',
+    threadId: 't1',
+    characterId,
+    slug,
+    userId: 'u1',
+    username: 'u1',
+    displayName: 'u1',
+    avatar: null,
+    rating: 4,
+    text: 'Avis.',
+    createdAt: '2026-07-01T00:00:00.000Z',
+  };
+}
+
+describe('id du perso : migration v3 et renommage', () => {
+  it('juste après la migration, avant tout remplissage : aucun post créé', async () => {
+    // L'état d'une base v2 migrée : toutes les lignes sans id.
+    store.replaceAll(
+      [{ threadId: 't1', characterId: null, slug: 'dahlia' }],
+      [indexedReview(null, 'dahlia')],
+    );
+    expect(store.knownCharacterIds()).toEqual(new Set());
+    const { client, fetchChannel } = fakeClient([]);
+
+    const report = await syncForumPosts(client, store, true);
+    expect(report.created).toEqual([]);
+    expect(fetchChannel).not.toHaveBeenCalled(); // forum jamais ouvert : rien à créer
+    expect(store.knownCharacterIds()).toEqual(new Set(['1']));
+    expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m1']);
+  });
+
+  it('perso renommé (même id) : reviews, post et lien de build gardés', async () => {
+    store.addReview(indexedReview('1', 'dahlia'));
+    store.setBuildThread('1', 'dahlia', '111');
+    getCharacters.mockResolvedValue([{ ...DAHLIA, slug: 'dahlia-prime', name: 'Dahlia Prime' }]);
+    const { client, fetchChannel } = fakeClient(
+      [msg('m1', 'u1', '4/5\nAvis.', '2026-07-01T00:00:00Z')],
+      'Dahlia', // le post garde l'ancien nom
+    );
+
+    await syncForumPosts(client, store, true);
+    expect(fetchChannel).not.toHaveBeenCalled();
+    expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m1']);
+    expect(store.buildThread('1')).toEqual({ threadId: '111', infoThreadId: null });
+
+    // Le resync relie le post par l'id de la base (pas par son nom, périmé) et
+    // réécrit le slug courant.
+    const report = await resyncFromDiscord(client, store);
+    expect(report.unresolved).toEqual([]);
+    expect(store.characterForThread('t1')).toEqual({ characterId: '1', slug: 'dahlia-prime' });
+    expect(Object.keys(store.summary())).toEqual(['dahlia-prime']);
+    expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m1']);
+  });
+
+  it('resync sur une base pas encore remplie : ids posés d’abord', async () => {
+    store.registerThread('t1', null, 'dahlia');
+    const { client } = fakeClient([msg('m1', 'u1', '4/5\nAvis.', '2026-07-01T00:00:00Z')], 'Autre');
+    const report = await resyncFromDiscord(client, store);
+    expect(report.unresolved).toEqual([]);
+    expect(store.characterForThread('t1')).toEqual({ characterId: '1', slug: 'dahlia' });
+    expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m1']);
+  });
+});
+
+describe('tryAddReview — dépôt en direct par id', () => {
+  const live = (id: string, threadId = 't1') =>
+    ({
+      id,
+      channelId: threadId,
+      content: '4/5\nTrès bon.',
+      member: null,
+      createdAt: new Date('2026-07-01T00:00:00Z'),
+      author: { id: 'u1', username: 'u1', displayName: 'u1', avatar: null },
+    }) as unknown as Parameters<typeof tryAddReview>[1];
+
+  it('même membre, même perso : le second est refusé', () => {
+    expect(tryAddReview(store, live('m1'))).toBeNull();
+    expect(tryAddReview(store, live('m2'))).toBe('duplicate');
+    expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m1']);
+  });
+
+  it('post pas encore rempli : ignoré comme un fil inconnu', () => {
+    store.registerThread('t1', null, 'dahlia');
+    expect(tryAddReview(store, live('m1'))).toBe('unknown_thread');
   });
 });

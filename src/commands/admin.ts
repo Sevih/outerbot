@@ -7,6 +7,7 @@
  *             réparation) ;
  *   link    — pose/màj le thread de build curé d'un perso (ex-threads.json) ;
  *   unlink  — le retire.
+ * link/unlink : l'autocomplétion montre le NOM du perso et rend son id.
  * Réservé à l'admin par l'ADMIN_USER_ID, vérifié À L'EXÉCUTION (les autres
  * reçoivent « Admin only » en éphémère). PAS de defaultMemberPermissions=0 :
  * ça masque la commande à quiconque n'a pas la permission Administrateur du
@@ -17,7 +18,7 @@ import { config } from '../config.js';
 import { syncForumPosts } from '../reviews/forum-sync.js';
 import { resyncFromDiscord } from '../reviews/resync.js';
 import { wiki } from '../wiki/client.js';
-import { safeAutocomplete } from './helpers.js';
+import { safeAutocompleteChoices } from './helpers.js';
 import type { Command } from './types.js';
 
 /** Extrait l'id de thread d'un lien Discord (ou accepte l'id nu). */
@@ -67,9 +68,9 @@ export const adminCommand: Command = {
 
   async autocomplete(interaction) {
     const characters = await wiki.getCharacters();
-    await safeAutocomplete(
+    await safeAutocompleteChoices(
       interaction,
-      characters.map((c) => c.slug),
+      characters.map((c) => ({ name: c.name, value: c.id })),
     );
   },
 
@@ -110,7 +111,15 @@ export const adminCommand: Command = {
     }
 
     if (sub === 'link') {
-      const slug = interaction.options.getString('character', true);
+      const characterId = interaction.options.getString('character', true);
+      const character = (await wiki.getCharacters()).find((c) => c.id === characterId);
+      if (!character) {
+        await interaction.reply({
+          content: '❌ Unknown character — pick one from the list.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
       const thread = threadIdFrom(interaction.options.getString('thread', true));
       const infoRaw = interaction.options.getString('infographic');
       const info = infoRaw ? threadIdFrom(infoRaw) : null;
@@ -121,19 +130,23 @@ export const adminCommand: Command = {
         });
         return;
       }
-      store.setBuildThread(slug, thread, info ?? undefined);
+      store.setBuildThread(character.id, character.slug, thread, info ?? undefined);
       await interaction.reply({
-        content: `✅ Build thread lié pour **${slug}**.`,
+        content: `✅ Build thread lié pour **${character.name}**.`,
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     if (sub === 'unlink') {
-      const slug = interaction.options.getString('character', true);
-      const removed = store.removeBuildThread(slug);
+      const characterId = interaction.options.getString('character', true);
+      // Le nom pour la réponse ; un perso que le site ne sert plus se retire par son id.
+      const name =
+        (await wiki.getCharacters().catch(() => [])).find((c) => c.id === characterId)?.name ??
+        characterId;
+      const removed = store.removeBuildThread(characterId);
       await interaction.reply({
-        content: removed ? `✅ Lien retiré pour **${slug}**.` : `— Aucun lien pour **${slug}**.`,
+        content: removed ? `✅ Lien retiré pour **${name}**.` : `— Aucun lien pour **${name}**.`,
         flags: MessageFlags.Ephemeral,
       });
     }

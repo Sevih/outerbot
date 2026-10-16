@@ -29,12 +29,13 @@ export const statusCommand: Command = {
   data: new SlashCommandBuilder().setName('status').setDescription('Bot status'),
   async execute(interaction, { store }) {
     const wikiStatus = wiki.status();
-    const known = store.knownSlugs();
+    const known = store.knownCharacterIds();
     const characters = await wiki.getCharacters().catch(() => []);
-    const missing = characters.filter((c) => !known.has(c.slug)).map((c) => c.slug);
+    const missing = characters.filter((c) => !known.has(c.id)).map((c) => c.name);
+    const unresolved = store.unresolvedSlugs();
 
     const lines = [
-      `Reviews: **${store.countReviews()}** across **${known.size}** threads`,
+      `Reviews: **${store.countReviews()}** across **${store.countThreads()}** threads`,
       `Wiki data: **${wikiStatus.charactersCount}** characters (fetched ${wikiStatus.lastFetch ?? 'never'})`,
       `Last forum sync: ${store.getMeta('lastForumSync') ?? 'never'}`,
       `Last full resync: ${store.getMeta('lastResync') ?? 'never'}`,
@@ -45,6 +46,11 @@ export const statusCommand: Command = {
     if (missing.length) {
       lines.push(
         `⚠ Characters without a review thread: ${missing.slice(0, 15).join(', ')}${missing.length > 15 ? '…' : ''}`,
+      );
+    }
+    if (unresolved.length) {
+      lines.push(
+        `⚠ Slugs without a character id: ${unresolved.slice(0, 15).join(', ')}${unresolved.length > 15 ? '…' : ''}`,
       );
     }
     await interaction.reply({ content: lines.join('\n'), flags: MessageFlags.Ephemeral });

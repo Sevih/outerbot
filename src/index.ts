@@ -48,9 +48,11 @@ client.once(Events.ClientReady, (ready) => {
 
   // Base sans threads (premier démarrage, volume perdu) : resync AVANT le
   // forum-sync, retenté chaque minute tant qu'il échoue (cf. reviews/boot.ts).
-  if (store.knownSlugs().size === 0) logger.info('base vide — resync complet depuis Discord…');
+  // « Vide » compte tous les posts, remplis ou non : une base d'avant v3 (ids
+  // encore NULL) n'est pas vide, le forum-sync la remplit.
+  if (store.countThreads() === 0) logger.info('base vide — resync complet depuis Discord…');
   void indexThenStart({
-    isEmpty: () => store.knownSlugs().size === 0,
+    isEmpty: () => store.countThreads() === 0,
     resync: () => resyncFromDiscord(client, store),
     start: () => startForumSyncLoop(client, store),
     onError: (e) => logger.error('resync de démarrage échoué — nouvel essai dans 1 min', e),

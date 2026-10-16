@@ -121,7 +121,7 @@ export const charCommand: Command = {
         });
         return;
       }
-      const embed = charEmbed(target, store.buildThread(target.slug), bases());
+      const embed = charEmbed(target, store.buildThread(target.id), bases());
       await interaction.reply({ embeds: [embed] });
       return;
     }
@@ -139,7 +139,7 @@ export const charCommand: Command = {
 
     const lines = filtered
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((c) => charListLine(c, store.buildThread(c.slug), bases()));
+      .map((c) => charListLine(c, store.buildThread(c.id), bases()));
 
     await interaction.reply({
       content: fitLines(`👥 **Characters (${filtered.length})**`, lines),

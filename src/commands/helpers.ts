@@ -9,10 +9,18 @@ export async function safeAutocomplete(
   interaction: AutocompleteInteraction,
   values: string[],
 ): Promise<void> {
+  await safeAutocompleteChoices(
+    interaction,
+    values.map((v) => ({ name: v, value: v })),
+  );
+}
+
+/** Variante qui montre `name` et rend `value` (un nom affiché, un id rendu). */
+export async function safeAutocompleteChoices(
+  interaction: AutocompleteInteraction,
+  choices: { name: string; value: string }[],
+): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
-  const choices = values
-    .filter((v) => v.toLowerCase().includes(focused))
-    .slice(0, 25)
-    .map((v) => ({ name: v, value: v }));
-  await interaction.respond(choices).catch(() => {});
+  const matching = choices.filter((c) => c.name.toLowerCase().includes(focused)).slice(0, 25);
+  await interaction.respond(matching).catch(() => {});
 }

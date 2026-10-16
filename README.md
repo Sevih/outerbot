@@ -4,8 +4,8 @@ Bot Discord d'[Outerpedia](https://outerpedia.com), en production. Deux métiers
 
 - **Reviews communautaires** : forum `#hero-reviews` (EvaMains), un post par
   perso ; un message `X/5` + texte = une review, réactions 👍/👎 = score. Le
-  bot les sert au site via `GET /reviews/:slug` (section Reviews des fiches
-  perso).
+  bot les sert au site via `GET /reviews/:id` (id du perso, ou son slug ;
+  section Reviews des fiches perso).
 - **Lookup wiki** : `/char`, `/item`, `/guide` — liens et fiches express dans
   Discord.
 - **Annonces** : chaque nouveau code promo et chaque nouvelle entrée du journal
@@ -23,8 +23,13 @@ qui héberge les deux vit dans un repo d'Infrastructure-as-Code resté privé.
 - **Discord est la source de vérité** du contenu ; SQLite (`data/outerbot.sqlite`)
   n'est qu'un **index reconstructible** — `/admin resync` rescanne tout
   (threads actifs + archivés, TOUS les messages, scores recalculés).
-- **Le slug d'un perso est posé par le bot** à la création du post forum
-  (slug canonique du site), jamais déduit du nom du thread.
+- **Un perso est désigné par son id** (`id` de `/api/bot/characters`, stable),
+  posé par le bot à la création du post forum, jamais déduit du nom du thread.
+  Posts, reviews et liens de build sont indexés par id ; le slug, dérivé du nom
+  affiché et recalculé par le site, ne sert qu'à l'affichage et au repli : un
+  perso renommé garde ses reviews, son post et son lien. Les lignes d'avant
+  l'id se remplissent d'après leur slug en tête de chaque forum-sync et resync ;
+  `/status` montre les slugs restés sans id.
 - **Aucune donnée wiki dans le repo** : le bot interroge l'API interne du site
   (`WIKI_API_URL/api/bot/*`), cache mémoire TTL 1 h, repli stale si le site est
   injoignable. Il ne construit **aucun lien du site** : fiches, guides,
@@ -44,8 +49,10 @@ qui héberge les deux vit dans un repo d'Infrastructure-as-Code resté privé.
   route interne du site (`/api/internal/coupons`, jeton `COUPON_API_SECRET`),
   qui valide et écrit la liste vivante sur R2 (écriture conditionnelle : un
   code ajouté par le staff et une sauvegarde de l'admin ne s'écrasent jamais).
-- **Contrat HTTP identique à l'ancien bot** (`/reviews`, `/reviews/:slug`,
-  `/health`) : le site s'y branche sans adaptation.
+- **Contrat HTTP de l'ancien bot** (`/reviews`, `/reviews/:slug`, `/health`),
+  étendu : `/reviews/:id` accepte aussi l'id du perso (une clé faite de
+  chiffres) ; un slug est résolu en id par la liste de persos en cache, avec
+  repli sur le slug écrit en base. Le résumé `/reviews` reste par slug.
 
 ⚠️ Le bot tourne sur la **même application Discord** que son prédécesseur : ne
 jamais lancer deux process en même temps (un `pnpm dev` local pendant que la

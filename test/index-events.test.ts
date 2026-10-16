@@ -11,10 +11,11 @@ let store: Store;
 
 beforeEach(() => {
   store = new Store(openDb(':memory:'));
-  store.registerThread('t1', 'dahlia');
+  store.registerThread('t1', '1', 'dahlia');
   store.addReview({
     messageId: 'm1',
     threadId: 't1',
+    characterId: '1',
     slug: 'dahlia',
     userId: 'u1',
     username: 'sevih',
@@ -30,7 +31,7 @@ beforeEach(() => {
 describe('applyEdit', () => {
   it('review restée au format : nouvelle note et nouveau texte, score gardé', () => {
     expect(applyEdit(store, 'm1', '2/5\nFinalement moyen.', 1000)).toBe('updated');
-    expect(store.reviewsFor('dahlia')[0]).toMatchObject({
+    expect(store.reviewsFor('1')[0]).toMatchObject({
       rating: 2,
       text: 'Finalement moyen.',
       score: 2,
@@ -39,14 +40,14 @@ describe('applyEdit', () => {
 
   it('le texte édité est nettoyé comme au dépôt (liens retirés, borne)', () => {
     expect(applyEdit(store, 'm1', '3/5\nVoir https://exemple.org ici', 1000)).toBe('updated');
-    expect(store.reviewsFor('dahlia')[0]!.text).toBe('Voir  ici');
+    expect(store.reviewsFor('1')[0]!.text).toBe('Voir  ici');
     applyEdit(store, 'm1', '3/5\n' + 'a'.repeat(50), 10);
-    expect(store.reviewsFor('dahlia')[0]!.text).toBe('a'.repeat(10));
+    expect(store.reviewsFor('1')[0]!.text).toBe('a'.repeat(10));
   });
 
   it('review qui perd le format X/5 : retirée de l’index', () => {
     expect(applyEdit(store, 'm1', 'Je retire ma note.', 1000)).toBe('removed');
-    expect(store.reviewsFor('dahlia')).toEqual([]);
+    expect(store.reviewsFor('1')).toEqual([]);
   });
 
   it('texte vide après nettoyage : retirée aussi', () => {
@@ -69,10 +70,10 @@ describe('rescoreFromReactions', () => {
     expect(rescoreFromReactions(store, 'm1', reactions([['👍', { count: 4, me: true }]]))).toBe(
       true,
     );
-    expect(store.reviewsFor('dahlia')[0]!.score).toBe(3);
+    expect(store.reviewsFor('1')[0]!.score).toBe(3);
 
     rescoreFromReactions(store, 'm1', reactions([['👎', { count: 2, me: false }]]));
-    expect(store.reviewsFor('dahlia')[0]!.score).toBe(-2);
+    expect(store.reviewsFor('1')[0]!.score).toBe(-2);
   });
 
   it('message hors index : aucun effet', () => {

@@ -6,10 +6,11 @@
  * Deux différences assumées avec le rebuild du bot V2 :
  *   - TOUS les messages sont lus (pagination par `before`), pas les 100
  *     derniers — aucun thread actif n'a vocation à perdre ses vieilles reviews ;
- *   - le mapping thread → slug passe par la DB quand il existe, et ne DÉRIVE du
- *     nom du thread qu'en dernier recours (threads hérités de la V2), résolu
- *     contre les NOMS de l'API wiki — un thread irrésoluble est signalé, jamais
- *     deviné.
+ *   - le mapping thread → perso (id) passe par la DB quand il existe, et ne
+ *     DÉRIVE du nom du thread qu'en dernier recours (threads hérités de la V2),
+ *     résolu contre les NOMS de l'API wiki — un thread irrésoluble est signalé,
+ *     jamais deviné. Le slug écrit est celui que le site donne aujourd'hui à
+ *     cet id (renommage compris), sinon celui de la DB.
  *
  * Écriture ATOMIQUE en fin de scan (`store.replaceAll`) : un resync interrompu
  * ne laisse jamais une base à moitié vide. Le forum-sync attend la fin du
@@ -33,6 +34,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import type { NewReview, Store } from '../db/store.js';
 import { wiki } from '../wiki/client.js';
+import { fillCharacterIds } from './forum-sync.js';
 import { parseReview, reviewGate, sanitizeReviewText, scoreFromReactions } from './core.js';
 import { withIndexLock } from './index-lock.js';
 
@@ -138,12 +140,15 @@ async function rebuildIndex(client: Client, store: Store): Promise<ResyncReport>
     throw new Error(`resync : ${config.reviews.forumChannelId} n'est pas un forum`);
   }
 
-  // Résolutions de slug : DB d'abord, sinon nom du thread ↔ nom wiki (héritage V2).
+  // Résolutions de perso : DB d'abord (ids remplis avant lecture), sinon nom du
+  // thread ↔ nom wiki (héritage V2).
   const characters = await wiki.getCharacters(true);
-  const slugByName = new Map(characters.map((c) => [c.name.toLowerCase(), c.slug]));
-  const knownByThread = new Map(store.allThreads().map((t) => [t.threadId, t.slug]));
+  fillCharacterIds(store, characters);
+  const idByName = new Map(characters.map((c) => [c.name.toLowerCase(), c.id]));
+  const slugById = new Map(characters.map((c) => [c.id, c.slug]));
+  const knownByThread = new Map(store.allThreads().map((t) => [t.threadId, t]));
 
-  const threads: { threadId: string; slug: string }[] = [];
+  const threads: { threadId: string; characterId: string | null; slug: string }[] = [];
   const reviews: NewReview[] = [];
   const unresolved: string[] = [];
   let refused = 0;
@@ -153,12 +158,15 @@ async function rebuildIndex(client: Client, store: Store): Promise<ResyncReport>
   const now = Date.now();
 
   for (const thread of await fetchAllThreads(forum)) {
-    const slug = knownByThread.get(thread.id) ?? slugByName.get(thread.name.toLowerCase());
+    const known = knownByThread.get(thread.id);
+    const characterId = known?.characterId ?? idByName.get(thread.name.toLowerCase()) ?? null;
+    // Un post connu dont le slug reste sans id (/status le montre) est gardé tel quel.
+    const slug = (characterId && slugById.get(characterId)) || known?.slug;
     if (!slug) {
       unresolved.push(thread.name);
       continue;
     }
-    threads.push({ threadId: thread.id, slug });
+    threads.push({ threadId: thread.id, characterId, slug });
 
     try {
       for (const { message, rating, text } of (await firstReviewByUser(thread)).values()) {
@@ -176,6 +184,7 @@ async function rebuildIndex(client: Client, store: Store): Promise<ResyncReport>
         reviews.push({
           messageId: message.id,
           threadId: thread.id,
+          characterId,
           slug,
           userId: message.author.id,
           username: message.author.username,
