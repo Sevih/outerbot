@@ -159,7 +159,12 @@ async function rebuildIndex(client: Client, store: Store): Promise<ResyncReport>
 
   for (const thread of await fetchAllThreads(forum)) {
     const known = knownByThread.get(thread.id);
-    const characterId = known?.characterId ?? idByName.get(thread.name.toLowerCase()) ?? null;
+    // Un post connu de la DB garde ce qu'elle dit, même sans id : son nom ne
+    // décide pas (un ancien post « Snow » d'un slug périmé prendrait l'id du
+    // post courant de Snow, et l'index unique ferait échouer tout le resync).
+    const characterId = known
+      ? known.characterId
+      : (idByName.get(thread.name.toLowerCase()) ?? null);
     // Un post connu dont le slug reste sans id (/status le montre) est gardé tel quel.
     const slug = (characterId && slugById.get(characterId)) || known?.slug;
     if (!slug) {

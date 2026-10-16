@@ -215,6 +215,37 @@ describe('id du perso : migration v3 et renommage', () => {
     expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m1']);
   });
 
+  it('ancien post d’un slug périmé, au nom d’un perso qui a son post : gardé sans id', async () => {
+    store.registerThread('t2', null, 'dahlia-2');
+    const thread = (id: string) => ({
+      id,
+      name: 'Dahlia',
+      messages: { fetch: () => Promise.resolve(new Collection()) },
+    });
+    const forum = {
+      type: ChannelType.GuildForum,
+      threads: {
+        fetch: () =>
+          Promise.resolve({
+            threads: new Collection([
+              ['t1', thread('t1')],
+              ['t2', thread('t2')],
+            ]),
+          }),
+        fetchArchived: () => Promise.resolve({ threads: new Collection(), hasMore: false }),
+      },
+    };
+    const client = {
+      channels: { fetch: () => Promise.resolve(forum) },
+    } as unknown as Client;
+
+    const report = await resyncFromDiscord(client, store);
+    expect(report.unresolved).toEqual([]);
+    expect(store.characterForThread('t1')).toEqual({ characterId: '1', slug: 'dahlia' });
+    expect(store.characterForThread('t2')).toBeUndefined();
+    expect(store.unresolvedSlugs()).toEqual(['dahlia-2']);
+  });
+
   it('resync sur une base pas encore remplie : ids posés d’abord', async () => {
     store.registerThread('t1', null, 'dahlia');
     const { client } = fakeClient([msg('m1', 'u1', '4/5\nAvis.', '2026-07-01T00:00:00Z')], 'Autre');
