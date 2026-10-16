@@ -22,8 +22,12 @@ export interface WikiCharacter {
   element: string;
   class: string;
   rarity: number;
-  /** Id V3 — sert l'URL de la face icon (FI_<id>) dans les embeds. */
+  /** Id V3 du perso. */
   id: string;
+  /** Fiche du perso, chemin du site sans préfixe de langue — fourni par le site. */
+  href?: string;
+  /** Face icon, chemin d'image relatif (préfixé par IMG_BASE_URL) — fourni par le site. */
+  icon?: string;
 }
 
 /** Un guide (catégorie + slug + titre EN) pour /guide. */
@@ -31,6 +35,8 @@ export interface WikiGuide {
   category: string;
   slug: string;
   title: string;
+  /** Page du guide, chemin du site sans préfixe de langue — fourni par le site. */
+  href?: string;
 }
 
 /** Un équipement pour /item — champs des embeds V2, rien de plus. */
@@ -47,6 +53,8 @@ export interface WikiItem {
   source?: string;
   /** EE : le porteur. */
   characterName?: string;
+  /** Page détail, chemin du site sans préfixe de langue — fourni par le site. */
+  href?: string;
 }
 
 /** Un code promo ACTIF (annonces). Récompenses déjà en texte EN. */
@@ -55,10 +63,16 @@ export interface WikiCoupon {
   start: string;
   end: string;
   rewards: { name: string; qty: string }[];
+  /** Page des codes, chemin du site sans préfixe de langue — fourni par le site. */
+  href?: string;
+  /** Page officielle d'échange, adresse absolue — fournie par le site (le bot n'en garde aucune). */
+  redeemUrl?: string;
 }
 
 /** Une entrée PUBLIÉE du journal du site (annonces). */
 export interface WikiChangelogEntry {
+  /** Identité stable de l'entrée, fournie par le site : ni le titre ni la date ne la changent. */
+  id?: string;
   date: string;
   type: 'guide' | 'update' | 'feature' | 'character' | 'news' | 'fix';
   title: string;
@@ -68,6 +82,34 @@ export interface WikiChangelogEntry {
   href: string;
   /** Chemin d'image relatif (préfixé par IMG_BASE_URL). */
   thumb?: string;
+}
+
+/**
+ * Champs que le site sert pour que le bot ne recopie aucune de ses conventions
+ * (liens, vignette, URL d'échange, id du journal). Absents (site pas encore à
+ * jour) : le lien est omis, l'entrée du journal garde l'ancienne clé — et on
+ * le dit UNE fois par route et par champ, pas à chaque passage.
+ */
+const SITE_FIELDS: Record<string, readonly string[]> = {
+  '/api/bot/characters': ['href', 'icon'],
+  '/api/bot/guides': ['href'],
+  '/api/bot/items': ['href'],
+  '/api/bot/coupons': ['href', 'redeemUrl'],
+  '/api/bot/changelog': ['id'],
+};
+
+const warnedMissing = new Set<string>();
+
+function warnMissingFields(path: string, data: unknown): void {
+  if (!Array.isArray(data)) return;
+  for (const field of SITE_FIELDS[path] ?? []) {
+    const key = `${path}.${field}`;
+    if (warnedMissing.has(key)) continue;
+    const missing = data.filter((d) => !(d as Record<string, unknown>)?.[field]).length;
+    if (missing === 0) continue;
+    warnedMissing.add(key);
+    logger.warn(`wiki : ${key} absent sur ${missing}/${data.length} entrées (site pas à jour ?)`);
+  }
 }
 
 interface CacheEntry<T> {
@@ -88,7 +130,9 @@ export class WikiClient {
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`${path} → HTTP ${res.status}`);
-    return (await res.json()) as T;
+    const data: unknown = await res.json();
+    warnMissingFields(path, data);
+    return data as T;
   }
 
   /**

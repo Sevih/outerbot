@@ -5,14 +5,75 @@
 import { EmbedBuilder, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { fitLines } from '../lib/text.js';
-import { wiki } from '../wiki/client.js';
+import { wiki, type WikiCharacter } from '../wiki/client.js';
+import { joinUrl } from '../wiki/links.js';
 import { safeAutocomplete } from './helpers.js';
 import type { Command } from './types.js';
 
 const EMBED_COLOR = 0xe53e3e;
 
-const threadUrl = (threadId: string): string =>
-  `https://discord.com/channels/${config.discord.guildId}/${threadId}`;
+/** Fils de build curés d'un perso (`store.buildThread`). */
+export interface BuildThreads {
+  threadId: string;
+  infoThreadId: string | null;
+}
+
+/** Adresses dont dépend le rendu (config en prod, valeurs fixes en test). */
+export interface CharBases {
+  siteBaseUrl: string;
+  imgBaseUrl: string;
+  guildId: string;
+}
+
+const threadUrl = (guildId: string, threadId: string): string =>
+  `https://discord.com/channels/${guildId}/${threadId}`;
+
+/** Fiche d'un perso. Sans `href` ni `icon` du site, le lien ou la vignette est omis. */
+export function charEmbed(
+  target: WikiCharacter,
+  build: BuildThreads | undefined,
+  bases: CharBases,
+): EmbedBuilder {
+  const fields: { name: string; value: string }[] = [];
+  const page = joinUrl(bases.siteBaseUrl, target.href);
+  if (page) fields.push({ name: '🕮 Character Full Guide', value: `[View on Website](${page})` });
+  if (build) {
+    fields.push({
+      name: '💬 Build Thread',
+      value: `[View on Discord](${threadUrl(bases.guildId, build.threadId)})`,
+    });
+    if (build.infoThreadId) {
+      fields.push({
+        name: '📊 Infographic',
+        value: `[View on Discord](${threadUrl(bases.guildId, build.infoThreadId)})`,
+      });
+    }
+  }
+  const embed = new EmbedBuilder().setTitle(target.name).setColor(EMBED_COLOR);
+  // Face icon (FI_) : cadrée portrait, bien plus lisible en vignette
+  // d'embed que le petit sprite ATB (IG_Turn_) — choix Sevih 21/07.
+  const icon = joinUrl(bases.imgBaseUrl, target.icon);
+  if (icon) embed.setThumbnail(icon);
+  if (fields.length) embed.addFields(fields);
+  return embed;
+}
+
+/** Une ligne de la liste filtrée ; sans `href`, le nom reste sans lien. */
+export function charListLine(
+  c: WikiCharacter,
+  build: BuildThreads | undefined,
+  bases: CharBases,
+): string {
+  const page = joinUrl(bases.siteBaseUrl, c.href);
+  const buildLink = build ? ` ([💬](<${threadUrl(bases.guildId, build.threadId)}>))` : '';
+  return `• ${page ? `[${c.name}](${page})` : c.name}${buildLink}`;
+}
+
+const bases = (): CharBases => ({
+  siteBaseUrl: config.siteBaseUrl,
+  imgBaseUrl: config.imgBaseUrl,
+  guildId: config.discord.guildId,
+});
 
 export const charCommand: Command = {
   data: new SlashCommandBuilder()
@@ -60,32 +121,7 @@ export const charCommand: Command = {
         });
         return;
       }
-      const fields = [
-        {
-          name: '🕮 Character Full Guide',
-          value: `[View on Website](${config.siteBaseUrl}/characters/${target.slug})`,
-        },
-      ];
-      const build = store.buildThread(target.slug);
-      if (build) {
-        fields.push({
-          name: '💬 Build Thread',
-          value: `[View on Discord](${threadUrl(build.threadId)})`,
-        });
-        if (build.infoThreadId) {
-          fields.push({
-            name: '📊 Infographic',
-            value: `[View on Discord](${threadUrl(build.infoThreadId)})`,
-          });
-        }
-      }
-      const embed = new EmbedBuilder()
-        .setTitle(target.name)
-        .setColor(EMBED_COLOR)
-        // Face icon (FI_) : cadrée portrait, bien plus lisible en vignette
-        // d'embed que le petit sprite ATB (IG_Turn_) — choix Sevih 21/07.
-        .setThumbnail(`${config.imgBaseUrl}/images/characters/faceicon/FI_${target.id}.webp`)
-        .addFields(fields);
+      const embed = charEmbed(target, store.buildThread(target.slug), bases());
       await interaction.reply({ embeds: [embed] });
       return;
     }
@@ -103,11 +139,7 @@ export const charCommand: Command = {
 
     const lines = filtered
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((c) => {
-        const build = store.buildThread(c.slug);
-        const buildLink = build ? ` ([💬](<${threadUrl(build.threadId)}>))` : '';
-        return `• [${c.name}](${config.siteBaseUrl}/characters/${c.slug})${buildLink}`;
-      });
+      .map((c) => charListLine(c, store.buildThread(c.slug), bases()));
 
     await interaction.reply({
       content: fitLines(`👥 **Characters (${filtered.length})**`, lines),

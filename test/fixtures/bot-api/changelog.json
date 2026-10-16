@@ -1,0 +1,24 @@
+[
+  {
+    "id": "b0f61048",
+    "date": "2026-10-06",
+    "type": "character",
+    "title": "Demiurge Lambda",
+    "content": [
+      "Demiurge Lambda has been added to the database with full skills, stats and exclusive equipment."
+    ],
+    "href": "/characters/demiurge-lambda",
+    "thumb": "/images/characters/faceicon/FI_2000124.png"
+  },
+  {
+    "id": "ec0ed96a",
+    "date": "2026-10-06",
+    "type": "guide",
+    "title": "Universal Tower",
+    "content": [
+      "Added the **Universal Tower** guide: the new Skyward Tower open to every element, floor by floor, with no daily debuff.",
+      "Elemental Towers extended to 150 floors; Skyward Tower Hard team restrictions updated."
+    ],
+    "href": "/guides/skyward-tower/universal-tower"
+  }
+]

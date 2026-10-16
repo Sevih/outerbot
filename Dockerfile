@@ -53,8 +53,10 @@ COPY --chown=outerbot:nodejs package.json ./
 
 USER outerbot
 EXPOSE 3001
-# /health répond même si Discord est down (l'API reviews sert du SQLite local) —
-# c'est bien l'état du PROCESS qu'on sonde, pas celui de Discord.
+# /health répond 503 tant que le client Discord n'est pas prêt : sans Discord le
+# bot ne sert à rien, autant que `docker ps` le dise. Pendant une coupure, le
+# conteneur passe donc `unhealthy` — et rien ne le redémarre sur cet état (ni
+# Docker ni la stack) : c'est un signal, pas un remède.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.HTTP_PORT ?? 3001}/health`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 

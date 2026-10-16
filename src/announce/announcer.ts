@@ -57,11 +57,14 @@ const SOURCES: Source[] = [
       const coupons = await wiki.fetchCoupons();
       return {
         all: coupons.map(couponKey),
-        pending: newCoupons(coupons, seen).map((c) => ({
-          key: couponKey(c),
-          embed: couponEmbed(c, config.siteBaseUrl),
-          components: [couponButtons()],
-        })),
+        pending: newCoupons(coupons, seen).map((c) => {
+          const buttons = couponButtons(c);
+          return {
+            key: couponKey(c),
+            embed: couponEmbed(c, config.siteBaseUrl),
+            ...(buttons ? { components: [buttons] } : {}),
+          };
+        }),
       };
     },
   },
@@ -70,6 +73,8 @@ const SOURCES: Source[] = [
     async load(seen, today) {
       const entries = await wiki.fetchChangelog();
       return {
+        // Amorçage et envoi marquent la clé actuelle (l'id) ; l'ancienne clé
+        // date|titre ne sert plus qu'à reconnaître ce qui est déjà parti.
         all: entries.map(newsKey),
         pending: newNews(entries, seen, today).map((e) => ({
           key: newsKey(e),

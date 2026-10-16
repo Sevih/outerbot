@@ -6,6 +6,7 @@
 import { EmbedBuilder, MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { wiki, type WikiItem } from '../wiki/client.js';
+import { joinUrl } from '../wiki/links.js';
 import { safeAutocomplete } from './helpers.js';
 import type { Command } from './types.js';
 
@@ -19,9 +20,10 @@ const TYPE_CHOICES = [
   { name: 'Talisman', value: 'talisman' },
 ] as const;
 
-function itemEmbed(item: WikiItem): EmbedBuilder {
+/** Embed d'un équipement ; sans `href` du site, la ligne de lien est omise. */
+export function itemEmbed(item: WikiItem, siteBaseUrl: string, imgBaseUrl: string): EmbedBuilder {
   const embed = new EmbedBuilder().setTitle(item.name).setColor(EMBED_COLOR);
-  if (item.icon) embed.setThumbnail(`${config.imgBaseUrl}${item.icon}`);
+  if (item.icon) embed.setThumbnail(`${imgBaseUrl}${item.icon}`);
   if (item.characterName)
     embed.addFields({ name: 'Hero', value: item.characterName, inline: true });
   if (item.classLimit) embed.addFields({ name: 'Class', value: item.classLimit, inline: true });
@@ -32,10 +34,8 @@ function itemEmbed(item: WikiItem): EmbedBuilder {
     });
   }
   if (item.source) embed.setFooter({ text: `Source: ${item.source}` });
-  embed.addFields({
-    name: '​',
-    value: `🔗 [View on Outerpedia](${config.siteBaseUrl}/equipment/${item.slug})`,
-  });
+  const page = joinUrl(siteBaseUrl, item.href);
+  if (page) embed.addFields({ name: '​', value: `🔗 [View on Outerpedia](${page})` });
   return embed;
 }
 
@@ -88,6 +88,6 @@ export const itemCommand: Command = {
       await interaction.reply({ content: '❌ Item not found.', flags: MessageFlags.Ephemeral });
       return;
     }
-    await interaction.reply({ embeds: [itemEmbed(target)] });
+    await interaction.reply({ embeds: [itemEmbed(target, config.siteBaseUrl, config.imgBaseUrl)] });
   },
 };

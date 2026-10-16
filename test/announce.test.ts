@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   couponButtons,
   couponEmbed,
+  legacyNewsKey,
   newCoupons,
   newNews,
   newsEmbed,
@@ -21,6 +22,8 @@ const coupon = (over: Partial<WikiCoupon> = {}): WikiCoupon => ({
   start: '2026-09-23',
   end: '2026-10-31',
   rewards: [{ name: 'Gold', qty: '1000000' }],
+  href: '/coupons',
+  redeemUrl: 'https://redeem.example/coupon?lang=en',
   ...over,
 });
 
@@ -50,6 +53,29 @@ describe('sélection des nouveautés', () => {
     expect(newNews(list, seen, '2026-09-25').map((e) => e.title)).toEqual(['A', 'B']);
   });
 
+  it('journal : la clé est l’id servi par le site, l’ancienne date|titre sans id', () => {
+    expect(newsKey(entry({ id: 'b0f61048' }))).toBe('b0f61048');
+    expect(newsKey(entry())).toBe('2026-09-25|Outerpedia in French and Spanish');
+    expect(legacyNewsKey(entry({ id: 'b0f61048' }))).toBe(
+      '2026-09-25|Outerpedia in French and Spanish',
+    );
+  });
+
+  it('journal : une entrée annoncée sous l’ancienne clé n’est pas repostée', () => {
+    const known = entry({ id: 'aaaa0001', title: 'Déjà annoncée' });
+    const fresh = entry({ id: 'aaaa0002', title: 'Nouvelle' });
+    const seen = new Set([legacyNewsKey(known)]);
+    const out = newNews([known, fresh], seen, '2026-09-25');
+    expect(out.map((e) => e.title)).toEqual(['Nouvelle']);
+    expect(out.map(newsKey)).toEqual(['aaaa0002']);
+  });
+
+  it('journal : une entrée annoncée sous son id n’est pas repostée, même titre corrigé', () => {
+    const seen = new Set(['aaaa0001']);
+    const out = newNews([entry({ id: 'aaaa0001', title: 'Titre corrigé' })], seen, '2026-09-25');
+    expect(out).toEqual([]);
+  });
+
   it(`journal : la borne d'ancienneté est de ${NEWS_MAX_AGE_DAYS} jours, bornes incluses`, () => {
     const list = [entry({ date: '2026-09-23', title: 'limite' }), entry({ date: '2026-09-22' })];
     expect(newNews(list, new Set(), '2026-09-25').map((e) => e.title)).toEqual(['limite']);
@@ -58,8 +84,9 @@ describe('sélection des nouveautés', () => {
 
 describe('embeds', () => {
   it('coupon : code copiable, quantités lisibles, fin de validité en clair', () => {
-    const e = couponEmbed(coupon(), 'https://outerpedia.com');
-    expect(e.url).toBe('https://outerpedia.com/coupons');
+    const e = couponEmbed(coupon({ href: '/fr-free/coupons' }), 'https://outerpedia.com');
+    // Lien = base + chemin servi, sans rien reconstruire.
+    expect(e.url).toBe('https://outerpedia.com/fr-free/coupons');
     expect(e.description).toContain('`GOLDMOONPTY`');
     expect(e.description).toContain('• Gold ×1,000,000');
     const spaced = couponEmbed(coupon({ rewards: [{ name: 'Gold', qty: '1 000 000' }] }), '');
@@ -72,11 +99,23 @@ describe('embeds', () => {
     expect(e.description).not.toContain(':D>');
   });
 
-  it('coupon : un seul bouton, Redeem, vers la page officielle', () => {
-    const buttons = couponButtons().components;
+  it('coupon : sans href (aperçu de /coupon), pas de lien de titre', () => {
+    const c = coupon();
+    delete c.href;
+    expect(couponEmbed(c, 'https://outerpedia.com')).not.toHaveProperty('url');
+  });
+
+  it('coupon : un seul bouton, Redeem, vers l’URL servie par le site', () => {
+    const buttons = couponButtons(coupon())?.components;
     expect(buttons).toHaveLength(1);
-    const [redeem] = buttons;
-    expect(redeem && 'url' in redeem && redeem.url).toMatch(/^https:\/\/coupon\.outerplane/);
+    const [redeem] = buttons ?? [];
+    expect(redeem && 'url' in redeem && redeem.url).toBe('https://redeem.example/coupon?lang=en');
+  });
+
+  it('coupon : sans redeemUrl, pas de bouton', () => {
+    const c = coupon();
+    delete c.redeemUrl;
+    expect(couponButtons(c)).toBeUndefined();
   });
 
   it('journal : lien du site, vignette sur le CDN, date en horodatage', () => {

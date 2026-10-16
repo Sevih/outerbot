@@ -16,6 +16,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import type { Store } from '../db/store.js';
 import { wiki, type WikiCharacter } from '../wiki/client.js';
+import { joinUrl } from '../wiki/links.js';
 import { withIndexLock } from './index-lock.js';
 
 /** Délai entre deux créations de posts (rate limit Discord). */
@@ -36,7 +37,9 @@ const CLASS_EMOJIS: Record<string, string> = {
   ranger: '<:ranger:1384065872787669092>',
 };
 
-function welcomeMessage(c: WikiCharacter): string {
+/** Message d'accueil d'un post ; sans `href` du site, la ligne de lien est omise. */
+export function welcomeMessage(c: WikiCharacter, siteBaseUrl: string): string {
+  const page = joinUrl(siteBaseUrl, c.href);
   const el = ELEMENT_EMOJIS[c.element] ?? c.element;
   const cl = CLASS_EMOJIS[c.class] ?? c.class;
   const stars = '⭐'.repeat(c.rarity || 1);
@@ -48,8 +51,7 @@ function welcomeMessage(c: WikiCharacter): string {
     'X/5',
     'Your review here',
     '```',
-    '',
-    `🔗 [View on Outerpedia](${config.siteBaseUrl}/characters/${c.slug})`,
+    ...(page ? ['', `🔗 [View on Outerpedia](${page})`] : []),
   ].join('\n');
 }
 
@@ -115,7 +117,7 @@ async function createMissingPosts(
         name: c.name,
         autoArchiveDuration: 10080, // 1 semaine — l'archivage n'enlève rien au mapping
         rateLimitPerUser: 60, // slow mode : 1 message / 60 s
-        message: { content: welcomeMessage(c) },
+        message: { content: welcomeMessage(c, config.siteBaseUrl) },
         appliedTags,
       });
       store.registerThread(thread.id, c.slug);

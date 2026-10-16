@@ -1,0 +1,88 @@
+[
+  {
+    "type": "amulet",
+    "slug": "a-prima-vista",
+    "name": "A Prima Vista",
+    "icon": "/images/equipment/TI_Equipment_Accessary_06.webp",
+    "classLimit": "Striker",
+    "effectName": "Vanguard",
+    "effectTiers": [
+      "Lv.1: Grants a Barrier to the caster when counterattacking (100% of the wielder's Attack / only once per turn)"
+    ],
+    "source": "Amadeus",
+    "href": "/equipment/a-prima-vista"
+  },
+  {
+    "type": "amulet",
+    "slug": "briareoss-ambition-defender",
+    "name": "Briareos's Ambition [Defender]",
+    "icon": "/images/equipment/TI_Equipment_Accessary_06_Defender_IR_01.webp",
+    "classLimit": "Defender",
+    "effectName": "Ambition: Determination",
+    "effectTiers": [
+      "Lv.1: Increases Priority of the wearer by 15% after an ally uses an attack that targets all enemies (Activated only once every 2 turns)"
+    ],
+    "source": "Iron Stretcher · Blockbuster",
+    "href": "/equipment/briareoss-ambition-defender"
+  },
+  {
+    "type": "amulet",
+    "slug": "ether-amulet",
+    "name": "Ether Amulet",
+    "icon": "/images/equipment/TI_Equipment_Accessary_06.webp",
+    "href": "/equipment/ether-amulet"
+  },
+  {
+    "type": "ee",
+    "slug": "adaptable-gatling",
+    "name": "Adaptable Gatling",
+    "icon": "/images/characters/ee/2000073.webp",
+    "classLimit": "Striker",
+    "effectName": "Vlada's Exclusive Equipment",
+    "effectTiers": [
+      "Lv.1: When using Paths of Glory, inflicts Burned for 1 turn(s)",
+      "Lv.10: +20% Attack"
+    ],
+    "characterName": "Vlada",
+    "href": "/equipment/adaptable-gatling"
+  },
+  {
+    "type": "set",
+    "slug": "attack-set",
+    "name": "Attack Set",
+    "icon": "/images/equipment/TI_Icon_Set_Enchant_01.webp",
+    "effectName": "Set Effects",
+    "effectTiers": [
+      "2-Set: Attack +30%",
+      "4-Set: Attack +20%",
+      "2-Set (enchanted): Attack +35%",
+      "4-Set (enchanted): Attack +25%"
+    ],
+    "source": "Masterless Guardian",
+    "href": "/equipment/attack-set"
+  },
+  {
+    "type": "talisman",
+    "slug": "assassins-charm",
+    "name": "Assassin's Charm",
+    "icon": "/images/equipment/TI_Equipment_Talisman_08.webp",
+    "effectName": "Action Point Recovery - Ultimate",
+    "effectTiers": [
+      "Lv.1: Recovers 30 Action Points when using an ultimate",
+      "Lv.10: Recovers 45 Action Points when using an ultimate"
+    ],
+    "href": "/equipment/assassins-charm"
+  },
+  {
+    "type": "weapon",
+    "slug": "adventurers-sword",
+    "name": "Adventurer's Sword",
+    "icon": "/images/equipment/TI_Equipment_Weapon_06.webp",
+    "effectName": "Adventurer's Footsteps",
+    "effectTiers": [
+      "Lv.1: Has a 30% chance to increase Penetration for 1 turn after taking an action"
+    ],
+    "source": "Survey Hub",
+    "href": "/equipment/adventurers-sword"
+  }
+]

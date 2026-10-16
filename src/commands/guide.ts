@@ -2,6 +2,7 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { wiki } from '../wiki/client.js';
+import { joinUrl } from '../wiki/links.js';
 import type { Command } from './types.js';
 
 /** « world-boss » → « World Boss ». */
@@ -59,9 +60,10 @@ export const guideCommand: Command = {
         await interaction.reply({ content: '❌ Guide not found.', flags: MessageFlags.Ephemeral });
         return;
       }
-      await interaction.reply(
-        `📖 [${pretty(guide.category)} : ${guide.title}](${config.siteBaseUrl}/guides/${guide.category}/${guide.slug})`,
-      );
+      // Sans `href` du site, le titre reste sans lien.
+      const label = `${pretty(guide.category)} : ${guide.title}`;
+      const page = joinUrl(config.siteBaseUrl, guide.href);
+      await interaction.reply(`📖 ${page ? `[${label}](${page})` : label}`);
       return;
     }
 

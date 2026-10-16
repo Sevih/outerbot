@@ -1,0 +1,32 @@
+[
+  {
+    "code": "OUTER2026",
+    "start": "2026-10-01",
+    "end": "2026-10-31",
+    "rewards": [
+      {
+        "name": "Gold",
+        "qty": "100000"
+      },
+      {
+        "name": "Stamina",
+        "qty": "300"
+      }
+    ],
+    "href": "/coupons",
+    "redeemUrl": "https://coupon.outerplane.major7.kr/coupon?lang=en"
+  },
+  {
+    "code": "HALLOWEEN26",
+    "start": "2026-10-25",
+    "end": "2026-11-02",
+    "rewards": [
+      {
+        "name": "Ether",
+        "qty": "500"
+      }
+    ],
+    "href": "/coupons",
+    "redeemUrl": "https://coupon.outerplane.major7.kr/coupon?lang=en"
+  }
+]

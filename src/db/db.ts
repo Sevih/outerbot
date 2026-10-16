@@ -69,7 +69,8 @@ const MIGRATIONS: string[] = [
   -- Ce que le bot a DÉJÀ annoncé (ou marqué vu au premier passage). Seule table
   -- non reconstructible depuis Discord : si elle est perdue, le premier passage
   -- suivant remarque tout comme vu SANS poster (pas de rafale d'historique).
-  -- kind = 'coupon' | 'news' ; key = code du coupon, ou date|titre de l'entrée.
+  -- kind = 'coupon' | 'news' ; key = code du coupon, ou id de l'entrée du journal
+  -- (date|titre pour les anciennes, d'avant l'id servi par le site).
   CREATE TABLE announcements (
     kind         TEXT NOT NULL,
     key          TEXT NOT NULL,
