@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Mises à jour des actions GitHub épinglées par SHA dans les workflows.
+  # Dependabot réécrit le SHA ET le commentaire de version : garder la forme
+  # `@<sha> # vX.Y.Z` de ci.yml telle quelle.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    # Un seul PR hebdo pour les bumps minor/patch : chaque merge sur main
+    # redéploie le bot. Les majors restent à part : un PR ne lance que le job
+    # `check` (`docker` et `deploy` sont réservés au push sur main), une major
+    # d'une action docker/* n'est éprouvée qu'au merge, à regarder seule.
+    groups:
+      minor-and-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+    commit-message:
+      prefix: 'ci(deps)'
