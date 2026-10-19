@@ -108,6 +108,8 @@ export const charCommand: Command = {
     const characters = await wiki.getCharacters();
 
     if (!name && !element && !klass) {
+      // Un des deux seuls chemins écrits par le bot, nu comme les `href` du contrat :
+      // le proxy du site (`src/proxy.ts` d'outerpedia) y ajoute la langue par réécriture.
       await interaction.reply(`📚 [Browse all characters](${config.siteBaseUrl}/characters)`);
       return;
     }

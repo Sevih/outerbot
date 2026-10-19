@@ -205,6 +205,23 @@ describe('extraits du contrat : les consommateurs les rendent', () => {
   });
 });
 
+describe('extraits du contrat : href nus, sans préfixe de langue', () => {
+  // Le proxy du site ajoute la langue (réécriture interne, ou sous-domaine) ; un
+  // `href` préfixé serait redirigé (`/en/…` → 308 vers `/…`). Les index
+  // `/characters` et `/guides` de `/char` et `/guide` suivent la même forme.
+  const LANG_PREFIX = /^\/(en|fr|es|jp|kr|zh)(\/|$)/;
+  for (const route of ROUTES) {
+    it(`${route}.json`, () => {
+      const hrefs = (read(FIXTURES, route) as { href?: string }[]).flatMap((x) =>
+        x.href === undefined ? [] : [x.href],
+      );
+      expect(hrefs.length).toBeGreaterThan(0);
+      const bad = hrefs.filter((h) => !h.startsWith('/') || LANG_PREFIX.test(h));
+      expect(bad).toEqual([]);
+    });
+  }
+});
+
 describe('champ absent (site pas encore à jour) : lien omis, jamais reconstruit', () => {
   const [c] = characters;
   const bare: WikiCharacter = { ...c! };

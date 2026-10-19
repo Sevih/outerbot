@@ -49,6 +49,8 @@ export const guideCommand: Command = {
     const guides = await wiki.getGuides();
 
     if (!category && !guideRef) {
+      // Un des deux seuls chemins écrits par le bot, nu comme les `href` du contrat :
+      // le proxy du site (`src/proxy.ts` d'outerpedia) y ajoute la langue par réécriture.
       await interaction.reply(`📚 [Browse all guides](${config.siteBaseUrl}/guides)`);
       return;
     }

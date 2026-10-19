@@ -273,8 +273,9 @@ describe('tryAddReview — dépôt en direct par id', () => {
     expect(store.reviewsFor('1').map((r) => r.id)).toEqual(['m1']);
   });
 
-  it('post pas encore rempli : ignoré comme un fil inconnu', () => {
+  it('post pas encore rempli : review gardée par slug', () => {
     store.registerThread('t1', null, 'dahlia');
-    expect(tryAddReview(store, live('m1'))).toBe('unknown_thread');
+    expect(tryAddReview(store, live('m1'))).toBeNull();
+    expect(store.reviewsForSlug('dahlia').map((r) => r.id)).toEqual(['m1']);
   });
 });

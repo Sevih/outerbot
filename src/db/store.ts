@@ -44,7 +44,10 @@ function toReview(r: ReviewRow): Review {
 export interface NewReview {
   messageId: string;
   threadId: string;
-  /** Null : post d'un slug que le site ne connaît plus, gardé par le resync. */
+  /**
+   * Null : post pas encore rempli, ou d'un slug que le site ne connaît plus —
+   * gardé par le resync et le listener, rempli par `backfillCharacterIds`.
+   */
   characterId: string | null;
   slug: string;
   userId: string;
@@ -82,6 +85,17 @@ export class Store {
         'SELECT character_id, slug FROM threads WHERE thread_id = ? AND character_id IS NOT NULL',
       )
       .get(threadId) as { character_id: string; slug: string } | undefined;
+    return row ? { characterId: row.character_id, slug: row.slug } : undefined;
+  }
+
+  /**
+   * La ligne d'un post telle quelle, id NULL compris (post connu mais pas encore
+   * rempli) ; undefined pour un thread absent de la base.
+   */
+  threadOf(threadId: string): { characterId: string | null; slug: string } | undefined {
+    const row = this.db
+      .prepare('SELECT character_id, slug FROM threads WHERE thread_id = ?')
+      .get(threadId) as { character_id: string | null; slug: string } | undefined;
     return row ? { characterId: row.character_id, slug: row.slug } : undefined;
   }
 
@@ -149,6 +163,18 @@ export class Store {
       this.db
         .prepare('SELECT 1 FROM reviews WHERE character_id = ? AND user_id = ?')
         .get(characterId, userId),
+    );
+  }
+
+  /**
+   * Doublon d'une review encore sans id, par son slug : l'index unique
+   * (perso, utilisateur) ne couvre pas les NULL, c'est au code de dédoublonner.
+   */
+  hasReviewBySlug(slug: string, userId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare('SELECT 1 FROM reviews WHERE character_id IS NULL AND slug = ? AND user_id = ?')
+        .get(slug, userId),
     );
   }
 

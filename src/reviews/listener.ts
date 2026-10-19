@@ -50,12 +50,17 @@ async function explainAndDelete(message: Message, text: string, ttlMs: number): 
 
 /** Tente le dépôt d'une review depuis un message ; renvoie l'erreur éventuelle. */
 export function tryAddReview(store: Store, message: Message): ReviewRejection | null {
-  // Un post pas encore rempli (id NULL) passe pour inconnu : le forum-sync de
-  // démarrage le remplit dans la foulée, un resync rattrape ce qui serait passé.
-  const thread = store.characterForThread(message.channelId);
+  // Un post connu mais pas encore rempli (id NULL) garde la review par son slug,
+  // comme le resync : le `fillCharacterIds` du prochain forum-sync (ou resync)
+  // lui pose son id. Seul un thread absent de la base est ignoré.
+  const thread = store.threadOf(message.channelId);
   if (!thread) return 'unknown_thread';
   const { characterId, slug } = thread;
-  if (store.hasReview(characterId, message.author.id)) return 'duplicate';
+  const duplicate =
+    characterId !== null
+      ? store.hasReview(characterId, message.author.id)
+      : store.hasReviewBySlug(slug, message.author.id);
+  if (duplicate) return 'duplicate';
 
   const parsed = parseReview(message.content);
   if (!parsed) return 'bad_format';

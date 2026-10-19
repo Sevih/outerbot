@@ -32,11 +32,13 @@ qui héberge les deux vit dans un repo d'Infrastructure-as-Code resté privé.
   `/status` montre les slugs restés sans id.
 - **Aucune donnée wiki dans le repo** : le bot interroge l'API interne du site
   (`WIKI_API_URL/api/bot/*`), cache mémoire TTL 1 h, repli stale si le site est
-  injoignable. Il ne construit **aucun lien du site** : fiches, guides,
-  équipements, page des codes, vignettes, URL d'échange et id des entrées du
-  journal arrivent dans le contrat, le bot ne fait que préfixer ses bases
-  (`SITE_BASE_URL`, `IMG_BASE_URL`). Des extraits réels de chaque route vivent
-  dans `test/fixtures/bot-api/`, recopiés du site (`test/contract.test.ts`).
+  injoignable. Il ne construit **aucun lien du site** (deux exceptions, les
+  index `/characters` et `/guides` de `/char` et `/guide`, nus comme les `href`
+  du contrat) : fiches, guides, équipements, page des codes, vignettes, URL
+  d'échange et id des entrées du journal arrivent dans le contrat, le bot ne
+  fait que préfixer ses bases (`SITE_BASE_URL`, `IMG_BASE_URL`). Des extraits
+  réels de chaque route vivent dans `test/fixtures/bot-api/`, recopiés du site
+  (`test/contract.test.ts`).
 - **Zéro procédure par perso** : cron interne (6 h) + `/admin sync` créent les
   posts forum manquants tout seuls. Les liens de build curés s'éditent par
   `/admin link` (plus de JSON committé).

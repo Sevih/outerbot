@@ -152,6 +152,20 @@ describe('Store', () => {
     expect(store.reviewsFor('2')[0]!.score).toBe(5);
   });
 
+  it('post connu sans id : ligne rendue telle quelle, review gardée par slug puis remplie', () => {
+    store.registerThread('t3', null, 'ghost');
+    expect(store.threadOf('t3')).toEqual({ characterId: null, slug: 'ghost' });
+    expect(store.threadOf('inconnu')).toBeUndefined();
+
+    store.addReview(review({ messageId: 'm3', threadId: 't3', characterId: null, slug: 'ghost' }));
+    expect(store.hasReviewBySlug('ghost', 'u1')).toBe(true);
+    expect(store.hasReviewBySlug('ghost', 'u2')).toBe(false);
+
+    store.backfillCharacterIds([{ id: '2000009', slug: 'ghost' }]);
+    expect(store.reviewsFor('2000009').map((r) => r.id)).toEqual(['m3']);
+    expect(store.hasReview('2000009', 'u1')).toBe(true);
+  });
+
   it('builds curés : set/get/remove (ex-threads.json)', () => {
     store.setBuildThread('1', 'dahlia', '111', '222');
     expect(store.buildThread('1')).toEqual({ threadId: '111', infoThreadId: '222' });
